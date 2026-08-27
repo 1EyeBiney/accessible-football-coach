@@ -160,8 +160,13 @@
         var pp = pressurePhase(ctx, concept, events);
         res.pressured = pp.pressured;
 
-        if (pp.pressured && !concept.screen) {
-            var pSack = clamp(0.16 + pp.margin * 0.15 - (eff(qb, 'pkt') - 45) * 0.005, 0.04, 0.55);
+        // A screen invites the rush, so it is far harder to sack, but it is not
+        // immune: a rusher who stays home blows it up in the backfield. Making
+        // this a hard exemption meant no front, no blitz and no protection edge
+        // could ever make a screen a losing call.
+        if (pp.pressured) {
+            var screenGuard = concept.screen ? 0.18 : 1;
+            var pSack = clamp((0.16 + pp.margin * 0.15 - (eff(qb, 'pkt') - 45) * 0.005) * screenGuard, 0.01, 0.55);
             if (rng.chance(pSack)) {
                 res.outcome = 'sack';
                 res.yards = -Math.round(rng.uniform(3, 9));
@@ -173,7 +178,7 @@
                 return res;
             }
             var spy = adj === 'SPY';
-            var pScr = spy ? 0.03 : clamp(0.14 + (eff(qb, 'spd') - 45) * 0.004, 0.03, 0.4);
+            var pScr = concept.screen ? 0 : (spy ? 0.03 : clamp(0.14 + (eff(qb, 'spd') - 45) * 0.004, 0.03, 0.4));
             if (rng.chance(pScr)) {
                 res.outcome = 'scramble';
                 var chaser = bestBy(dl.LB.length ? dl.LB : dl.DB, 'spd', eff);
@@ -185,12 +190,18 @@
             }
         }
         if (pp.edge < -8 && rng.chance(0.06)) res.penalty = { on: 'O', kind: 'holding', yards: 10 };
-        var hurried = pp.pressured && !concept.screen;
-        var hurry = hurried ? (10 + pp.margin * 8) : 0;
+        // A screen thrown into a rush that stayed home is still a rushed throw,
+        // just less of one than a five step drop under pressure.
+        var hurried = pp.pressured;
+        var hurry = hurried ? (10 + pp.margin * 8) * (concept.screen ? 0.3 : 1) : 0;
 
         // Target selection
         var reads = [], i, role, rcv, dfd, sep, zone = !cov.man, depth = concept.depth;
-        var thin = pp.rushers >= 6 ? 8 : (pp.rushers === 5 ? 4 : 0);
+        // Fewer defenders in coverage loosens every route. This is the general
+        // effect; which concepts profit most from a blitz is the concept's own
+        // vsPress row, already added into schemeMod above, so this term is
+        // kept small to avoid paying the quick game twice for the same blitz.
+        var thin = pp.rushers >= 6 ? 4 : (pp.rushers === 5 ? 2 : 0);
         for (i = 0; i < concept.reads.length; i++) {
             role = concept.reads[i]; rcv = lu[role];
             if (!rcv) continue;
@@ -203,9 +214,15 @@
             sep = rv - dv + schemeMod + thin;
             if (zone) sep += (depth === 'short' ? 4 : depth === 'deep' ? -2 : 0);
             if (concept.pa && cov.deep <= 1 && depth !== 'short') sep += 4;
+            // Every adjustment costs the defense somewhere else (DESIGN.md
+            // 8.3). A defender committed to one receiver is a defender who is
+            // not on the others, and that opening is what lets the offense
+            // move before the counter lands.
             var help = 0;
-            if (adj === 'BRACKET' && role === 'WR1') help -= 12;
-            if (adj === 'HELP' && role === 'WR1' && depth !== 'short') help -= 9;
+            if (adj === 'BRACKET') help += (role === 'WR1' ? -12 : 6);
+            if (adj === 'HELP') help += (role === 'WR1' && depth !== 'short' ? -9 : 4);
+            if (adj === 'LOAD') help += 5;   // a safety in the box is a safety out of coverage
+            if (adj === 'SPY') help += 4;    // the spy is neither rushing nor covering
             if (adj === 'CONTAIN' && (concept.screen || concept.pa)) help -= 5;
             sep += help + rng.normal(0, 7);
             // edge is the part of the separation that is the receiver beating
@@ -373,6 +390,10 @@
         if (concept.qbRun) {
             res.outcome = 'run'; res.yards = Math.round(clamp(1 + edge * 0.05 + rng.normal(0.4, 0.9), -1, 4));
             res.yards = Math.min(res.yards, ctx.sit.ytg); res.clockRuns = true; res.tackler = dline[0];
+            // A sneak is low variance, not no variance. It can still be
+            // fumbled in the pile and it can still be held (DESIGN.md 26.5).
+            if (rng.chance(clamp(0.006 - (eff(carrier, 'awr') - 45) * 0.00008, 0.001, 0.02))) res.fumble = true;
+            if (we < -8 && rng.chance(0.06)) res.penalty = { on: 'O', kind: 'holding', yards: 10 };
             return res;
         }
 

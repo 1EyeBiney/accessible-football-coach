@@ -522,6 +522,17 @@
         store.covSeen[bucket][seen] = (store.covSeen[bucket][seen] || 0) + 1;
     }
 
+    // The offense can see two defenders on its best receiver, or a safety
+    // walking down. Whether the coordinator notices is his eyes, so this goes
+    // through the same evaluation filter as everything else.
+    function noteAdjustment(store, adjustment, rng) {
+        if (!adjustment || adjustment === 'NONE') return;
+        if (!store.adjSeen) store.adjSeen = {};
+        var pSee = clamp(0.35 + (evalOf(store.member) - 40) * 0.008, 0.2, 0.95);
+        if (rng && !rng.chance(pSee)) return;
+        store.adjSeen[adjustment] = (store.adjSeen[adjustment] || 0) + 1;
+    }
+
     function likelyCoverage(store, bucket) {
         var tally = store.covSeen[bucket];
         if (!tally) return null;
@@ -540,7 +551,7 @@
                 newBeliefs: newBeliefs, observe: observe, hunches: hunches,
                 changeOfPossession: changeOfPossession, injuryHunches: injuryHunches,
                 beliefMap: beliefMap, estimate: estimate, noteCoverage: noteCoverage,
-                likelyCoverage: likelyCoverage, confidenceWord: confidenceWord,
+                likelyCoverage: likelyCoverage, noteAdjustment: noteAdjustment, confidenceWord: confidenceWord,
                 evalOf: evalOf, commOf: commOf, needed: needed, speakDelay: speakDelay,
                 roleSay: roleSay, OFF_SAY: OFF_SAY, DEF_SAY: DEF_SAY, POA_SAY: POA_SAY };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

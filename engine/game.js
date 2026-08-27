@@ -166,12 +166,15 @@
         }
     }
 
-    function rollInjuries(rng, players, involved, injuries) {
+    function rollInjuries(rng, P, involved, injuries) {
         var i, p;
         for (i = 0; i < involved.length; i++) {
             p = involved[i];
             if (!p || p.live.out) continue;
-            var pInj = 0.0014 * (1 + (50 - p.attr.tgh) / 50) * (1 + (100 - p.live.stamina) / 100) * (p.hidden.injuryProne ? 1.6 : 1);
+            // Effective toughness, not base: a man already playing hurt is
+            // easier to hurt again (DESIGN.md 26.6).
+            var tgh = P.eff(p, 'tgh');
+            var pInj = 0.0014 * (1 + (50 - tgh) / 50) * (1 + (100 - p.live.stamina) / 100) * (p.hidden.injuryProne ? 1.6 : 1);
             if (rng.chance(pInj)) {
                 var severe = rng.chance(0.55);
                 if (severe) { p.live.out = true; p.live.health = 'out'; }
@@ -324,10 +327,14 @@
         if (rng.chance(pTB)) { line = RULES.HS.touchback; text = 'kickoff into the end zone, touchback'; }
         else {
             var ret = Math.round(clamp(rng.normal(24, 8), 3, 45));
-            if (rng.chance(0.02)) ret = Math.round(rng.uniform(50, 100));
+            // A long return is rare and a return for a score is rarer. The old
+            // form put one kickoff in fifty inside the opponent's half and
+            // narrated it as an ordinary return.
+            if (rng.chance(0.015)) ret = Math.round(rng.uniform(46, 70));
+            if (rng.chance(0.004)) ret = 100;
             line = Math.min(100, ret);
-            text = 'kickoff returned to the ' + spot(line);
-            if (line >= 100) { text = 'kickoff returned all the way for a touchdown'; }
+            text = line >= 100 ? 'kickoff returned all the way for a touchdown'
+                               : 'kickoff returned to the ' + spot(line);
         }
         game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
         game.clock = Math.max(0, game.clock - 5);
@@ -501,6 +508,7 @@
                 p = h.target;
                 if (p && !p.live.out) {
                     p.live.benched = true;
+                    team.live.subbedSinceSnap = true;
                     store = h.source === 'OC' ? team.live.beliefs.OC : team.live.beliefs.DC;
                     store.pulled[p.id] = true;
                 }
@@ -529,7 +537,14 @@
         // reports on how often that was worth doing (DESIGN.md 5.3).
         var hunchTest = hunchFollowed(off, play, PL);
         var personnel = PL.FORMATIONS[play.formation].personnel;
-        var offSubbed = off.live.lastPersonnel !== null && off.live.lastPersonnel !== personnel;
+        // Substituting counts as a substitution, so the defense gets its free
+        // one, whether the change came from a new personnel group or from
+        // pulling a tired man (DESIGN.md 16.5, 18.3). Without this the trade
+        // the design describes, fresh legs now against the defense resetting,
+        // does not exist.
+        var offSubbed = (off.live.lastPersonnel !== null && off.live.lastPersonnel !== personnel) ||
+                        !!off.live.subbedSinceSnap;
+        off.live.subbedSinceSnap = false;
 
         // Defensive call
         var dc = game.hooks && game.hooks.defense ? game.hooks.defense(game, def, sit, off, personnel, defIdx) : null;
@@ -563,10 +578,22 @@
         // Tendency tracking: the offense sees what the defense lined up in.
         // This is an observation, not a peek at the call sheet.
         deps.staff.noteCoverage(off.live.beliefs.OC, covBucket(sit), dc.coverage, rng);
+        deps.staff.noteAdjustment(off.live.beliefs.OC, dc.adjustment, rng);
+
+        // The defense declines an offensive penalty that would hand the ball
+        // back. A holding call must not erase an interception.
+        var turnedOver = res.outcome === 'interception' || res.fumbleLost;
+        if (turnedOver && res.penalty && res.penalty.on === 'O' && !res.penalty.preSnap) res.penalty = null;
+
+        // A play wiped out by a penalty did not happen, so it does not go in
+        // the book. Pass interference is scored as no attempt, the way real
+        // football scores it.
+        var nullified = !!res.penalty && (res.penalty.preSnap || res.penalty.on === 'O' || res.penalty.autoFirst);
+        res.nullified = nullified;
 
         var needed = sit.down === 1 ? sit.dist * 0.4 : (sit.down === 2 ? sit.dist * 0.6 : sit.dist);
         var success = res.yards >= needed && res.outcome !== 'interception' && !res.fumbleLost;
-        if (res.type !== 'penalty') {
+        if (res.type !== 'penalty' && !nullified) {
             play.calls++; play.yards += res.yards; if (success) play.success++;
             st.plays++;
             if (res.type === 'pass') {
@@ -598,7 +625,7 @@
         // rather than against the offense's average of everything, which would
         // measure which plays the hunch steered towards instead of whether the
         // coordinator was right.
-        if (res.type === 'pass' || res.type === 'run') {
+        if ((res.type === 'pass' || res.type === 'run') && !nullified) {
             game.hunchLog.push({ team: offIdx, concept: res.concept, yards: res.yards,
                                  followed: !!hunchTest,
                                  evaluation: off.staff.OC.attr.evaluation,

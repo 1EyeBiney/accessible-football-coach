@@ -216,6 +216,14 @@
 
     var CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'I am guessing here' };
 
+    // What an adjustment looks like from the other sideline, for the halftime
+    // briefing. These are things our coordinator watched them do.
+    var ADJ_SAY = { BRACKET: 'put two men on our best receiver',
+                    HELP: 'shade a safety over the top',
+                    LOAD: 'crowd the box',
+                    SPY: 'keep a linebacker on our quarterback',
+                    CONTAIN: 'stay wide and take away the edge' };
+
     // side is 'offense' or 'defense'. Returns the coordinator's call plus the
     // wording the interface reads, including the word sub when the call changes
     // personnel and hands the defense a free substitution.
@@ -355,6 +363,8 @@
         var p = h.target;
         if (answer === 'yes' && p && !p.live.out) {
             p.live.benched = true;
+            // Going now hands the defense a free substitution (DESIGN.md 18.3).
+            team.live.subbedSinceSnap = true;
             var store = h.source === 'OC' ? team.live.beliefs.OC : team.live.beliefs.DC;
             store.pulled[p.id] = true;
             say(c, p.name + ' comes out. ' + (h.recommendation && team.roster.byId[h.recommendation.into]
@@ -381,7 +391,7 @@
     // the biggest personnel problem, then one strategic choice.
     function halftime(c) {
         var g = c.game, S = c.deps.staff;
-        var team = g.teams[c.coach], opp = g.teams[1 - c.coach];
+        var team = g.teams[c.coach];
         var learned = [], changed = [], problem = null;
         var ocStore = team.live.beliefs.OC, dcStore = team.live.beliefs.DC;
         var map = S.beliefMap(ocStore), k, best = null, bv = -1e9, worst = null, wv = 1e9;
@@ -397,14 +407,28 @@
         var dmap = S.beliefMap(dcStore), dbest = null, dv = -1e9;
         for (k in dmap) if (dmap[k] > dv) { dv = dmap[k]; dbest = k; }
         if (dbest && dv > 3) changed.push('They keep going ' + keySay(dcStore, dbest) + '.');
-        if (opp.live.dcHunch) changed.push('They have started to ' + (opp.live.dcHunch.recommendation === 'LOAD'
-            ? 'crowd the box' : 'give help where we were winning') + '.');
+        // What the other staff has changed is read from what our own
+        // coordinator has watched them do, never from their hunches. Looking
+        // inside the opposing coordinator's head is the same violation as a
+        // computer coach reading our attributes (DESIGN.md 24.1).
+        var adjSeen = ocStore.adjSeen || {}, adjBest = null, av = 0;
+        for (k in adjSeen) if (adjSeen[k] > av) { av = adjSeen[k]; adjBest = k; }
+        if (adjBest && av >= 2) changed.push('They have started to ' + ADJ_SAY[adjBest] + '.');
         if (!changed.length) changed.push('They have not shown us anything new.');
-        var tired = team.roster.players.filter(function (p) { return !p.live.out && p.live.stamina < 45; });
+        // The personnel problem comes from the coordinator, who is the man
+        // whose job it is to watch this (DESIGN.md 18.1 and 18.3). The coach
+        // does not read stamina himself.
         var out = team.roster.players.filter(function (p) { return p.live.out; });
+        var pulled = [], id;
+        for (id in ocStore.pulled) if (team.roster.byId[id]) pulled.push(team.roster.byId[id]);
+        for (id in dcStore.pulled) if (team.roster.byId[id]) pulled.push(team.roster.byId[id]);
+        var flagged = [], hid;
+        for (hid in ocStore.asked) if (team.roster.byId[hid]) flagged.push(team.roster.byId[hid]);
+        for (hid in dcStore.asked) if (team.roster.byId[hid]) flagged.push(team.roster.byId[hid]);
         if (out.length) problem = out[0].name + ' is done for the night and we are thin behind him.';
-        else if (tired.length) problem = tired[0].name + ' is running on empty.';
-        else problem = 'Nobody is hurting yet.';
+        else if (pulled.length) problem = 'We have had to rest ' + pulled[0].name + ' already.';
+        else if (flagged.length) problem = flagged[0].name + ' is the one your coordinator keeps mentioning.';
+        else problem = 'Your staff is not worried about anybody yet.';
         return { learned: learned.slice(0, 3), changed: changed.slice(0, 2), problem: problem,
                  choices: [
                      { id: 'KEEP', text: 'Keep attacking where we have been winning.' },
@@ -435,7 +459,15 @@
         // The choice shapes what the coordinators suggest after the break.
         if (id === 'PRESSURE') team.style.aggression = clamp(team.style.aggression + 0.25, 0, 1);
         if (id === 'PROTECT') team.style.runLean = clamp(team.style.runLean + 0.15, 0, 1);
-        if (id === 'SHIFT') { team.live.ocHunch = null; team.live.beliefs.OC.obs = {}; }
+        if (id === 'SHIFT') {
+            // Look somewhere else, but do not forget the game. Emptying the
+            // store would redraw the coordinator's evaluation bias, which is
+            // drawn once a game on purpose, and would let a coach reroll a bad
+            // coordinator's read at will.
+            team.live.ocHunch = null;
+            var obs = team.live.beliefs.OC.obs, k;
+            for (k in obs) obs[k].last = team.live.beliefs.OC.plays;
+        }
         say(c, 'Second half plan set.', 'result', null);
         c.pending = nextPending(c);
         return drain(c);

@@ -173,8 +173,11 @@
         var box = FRONTS[front].box + COVERAGES[coverage].boxAdd + (adjustment === 'LOAD' ? 1 : 0);
         // Blockers available: 5 OL + tight ends + fullback
         var blockers = 5 + (personnel === '11' ? 1 : personnel === '21' ? 2 : personnel === '22' ? 3 : 0);
-        var diff = box - blockers; // 0 means even numbers
-        var weight = diff <= 0 ? 'light' : (diff === 1 ? 'normal' : 'loaded');
+        // Even numbers is a normal box, not a light one. Counting an even
+        // count as light handed every heavy personnel group a permanent bonus,
+        // because eight blockers is at or above almost every base front.
+        var diff = box - blockers;
+        var weight = diff < 0 ? 'light' : (diff <= 1 ? 'normal' : 'loaded');
         return { box: box, blockers: blockers, weight: weight };
     }
 

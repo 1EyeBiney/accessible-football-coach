@@ -70,11 +70,20 @@ for (c in PL.CONCEPTS) {
     var con3 = PL.CONCEPTS[c];
     if (con3.type !== 'run') continue;
     var form3 = con3.forms.indexOf('IFORM') >= 0 ? 'IFORM' : con3.forms[0];
-    // light: dime + cover two; normal: over + cover four; loaded: over + cover one with the box loaded
-    var light = cell(c, form3, 'DIME', 'C2', 'R4', 'NONE').avg;
-    var normal = cell(c, form3, 'OVER', 'C4', 'R4', 'NONE').avg;
-    var loaded = cell(c, form3, 'OVER', 'C1', 'R4', 'LOAD').avg;
-    console.log(con3.name + ': light ' + light.toFixed(1) + ', normal ' + normal.toFixed(1) + ', loaded ' + loaded.toFixed(1));
+    // The three cells have to actually produce the three box weights, or the
+    // check cannot see the thing it exists to see. boxWeight is asked directly
+    // rather than assumed, and the label printed is the one it returns.
+    var form3Personnel = PL.FORMATIONS[form3].personnel;
+    function boxCell(front, coverage, adjustment) {
+        var bw = PL.boxWeight(front, coverage, adjustment, form3Personnel);
+        return { weight: bw.weight, box: bw.box, avg: cell(c, form3, front, coverage, 'R4', adjustment).avg };
+    }
+    var light = boxCell('DIME', 'C2', 'NONE');
+    var normal = boxCell('OVER', 'C3', 'NONE');
+    var loaded = boxCell('OVER', 'C1', 'LOAD');
+    console.log(con3.name + ': ' + [light, normal, loaded].map(function (x) {
+        return x.weight + ' box of ' + x.box + ', ' + x.avg.toFixed(1);
+    }).join('; '));
 }
 console.log('');
 console.log('Adjustments against Four Verticals from Spread in cover three: none, bracket the X, help over the X.');
