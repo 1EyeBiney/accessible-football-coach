@@ -494,7 +494,10 @@
             if (h.kind === 'matchup') { team.live.ocHunch = h; team.live.ocHunchAge = 0; }
             else if (h.kind === 'adjustment') { team.live.dcHunch = h; team.live.dcHunchAge = 0; }
             else if (h.kind === 'substitution') {
-                // The automatic coach answers "yes, now" (DESIGN.md 18.3).
+                // The automatic coach answers "yes, now" (DESIGN.md 18.3). A
+                // team with a human coach leaves the question for him; the
+                // controller turns it into the must-answer report of 19.2.
+                if (team.autoCoach === false) continue;
                 p = h.target;
                 if (p && !p.live.out) {
                     p.live.benched = true;
@@ -705,49 +708,93 @@
                  box: { light: { att: 0, yds: 0 }, normal: { att: 0, yds: 0 }, loaded: { att: 0, yds: 0 } }, yardsHist: [] };
     }
 
-    function playGame(deps, home, away, seed, hooks) {
+    // A game is built once and then walked one step at a time, so the same
+    // loop serves the headless harness and the interface, which has to stop
+    // between every snap and let the coach speak (DESIGN.md 16.5, 19.3).
+
+    function startGame(deps, home, away, seed, hooks) {
         var rng = new deps.Rng(seed);
         var game = { rng: rng, teams: [home, away], score: [0, 0], stats: [newStats(), newStats()], log: [],
                      quarter: 1, clock: RULES.HS.quarterSecs, off: 0, ball: 25, down: 1, dist: 10, timeouts: [3, 3],
                      hooks: hooks || null, drivePlays: 0, ot: false,
-                     S: deps.staff, hunchLog: [] };
+                     S: deps.staff, hunchLog: [], finished: false, final: null,
+                     otRound: 0, otIndex: 0, otFirst: 0, guard: 0 };
         deps.players.resetLive(home.roster); deps.players.resetLive(away.roster);
         resetBeliefs(home, deps, (hooks && hooks.homeScouting) || {});
         resetBeliefs(away, deps, (hooks && hooks.awayScouting) || {});
-        var receivedFirst = rng.chance(0.5) ? 0 : 1;
-        kickoff(game, 1 - receivedFirst, deps);
-        var guard = 0;
-        while (game.quarter <= 4 && guard++ < 400) {
-            if (game.clock <= 0) {
-                game.quarter++;
-                game.clock = RULES.HS.quarterSecs;
-                if (game.quarter === 3) { game.timeouts = [3, 3]; game.log.push({ q: 3, clock: game.clock, kind: 'half', text: 'Halftime. ' + scoreLine(game) }); kickoff(game, receivedFirst, deps); }
-                if (game.quarter > 4) break;
-                continue;
-            }
-            step(game, deps);
-        }
-        // Overtime: alternating possessions from the 10 (DESIGN.md 25)
-        var otRounds = 0;
-        game.ot = false;
-        while (game.score[0] === game.score[1] && otRounds < 6) {
-            game.ot = true;
-            otRounds++;
-            game.quarter = 4 + otRounds; game.clock = 9999;
-            var first = otRounds % 2 === 1 ? 0 : 1, k;
-            game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period ' + otRounds });
-            for (k = 0; k < 2; k++) {
-                var t = k === 0 ? first : 1 - first;
-                setPossession(game, t, 90);
-                var g2 = 0;
-                while (game.off === t && g2++ < 20 && !(game.down > 4)) {
-                    var before = game.score.slice();
-                    step(game, deps, true);
-                    if (game.score[t] !== before[t] || game.off !== t) break;
-                }
-            }
-        }
+        game.receivedFirst = rng.chance(0.5) ? 0 : 1;
+        kickoff(game, 1 - game.receivedFirst, deps);
+        return game;
+    }
+
+    function finish(game) {
+        game.finished = true;
         game.final = game.score.slice();
+    }
+
+    // One step is at most one snap. A quarter or half rolling over is a step of
+    // its own that produces no snap, which is what the interface needs so it
+    // can speak the break before the next call.
+    function stepGame(game, deps) {
+        if (game.finished) return null;
+        if (game.guard++ > 1500) { finish(game); return null; }
+        if (game.ot) return otStep(game, deps);
+        if (game.clock <= 0) {
+            game.quarter++;
+            game.clock = RULES.HS.quarterSecs;
+            if (game.quarter === 3) {
+                game.timeouts = [3, 3];
+                game.log.push({ q: 3, clock: game.clock, kind: 'half', text: 'Halftime. ' + scoreLine(game) });
+                kickoff(game, game.receivedFirst, deps);
+                return null;
+            }
+            if (game.quarter > 4) {
+                if (game.score[0] === game.score[1]) beginOt(game, deps);
+                else finish(game);
+                return null;
+            }
+            return null;
+        }
+        return step(game, deps);
+    }
+
+    // Overtime: alternating possessions from the ten (DESIGN.md 25).
+    function beginOt(game, deps) {
+        game.ot = true;
+        game.otRound = 1;
+        game.otIndex = 0;
+        game.otFirst = 0;
+        game.quarter = 5;
+        game.clock = 9999;
+        game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period one' });
+        setPossession(game, game.otFirst, 90);
+    }
+
+    function otStep(game, deps) {
+        var t = game.off;
+        var before = game.score.slice();
+        var res = step(game, deps, true);
+        var possessionOver = (game.off !== t) || (game.score[t] !== before[t]) || game.down > 4;
+        if (!possessionOver) return res;
+        game.otIndex++;
+        if (game.otIndex < 2) {
+            setPossession(game, 1 - game.otFirst, 90);
+            return res;
+        }
+        if (game.score[0] !== game.score[1]) { finish(game); return res; }
+        game.otRound++;
+        if (game.otRound > 6) { finish(game); return res; }
+        game.otIndex = 0;
+        game.otFirst = 1 - game.otFirst;
+        game.quarter = 4 + game.otRound;
+        game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period ' + game.otRound });
+        setPossession(game, game.otFirst, 90);
+        return res;
+    }
+
+    function playGame(deps, home, away, seed, hooks) {
+        var game = startGame(deps, home, away, seed, hooks);
+        while (!game.finished) stepGame(game, deps);
         return game;
     }
 
@@ -761,16 +808,14 @@
             game.clock = Math.max(0, game.clock - 40); game.down++;
             game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'play', text: 'Kneel.' });
             if (game.down > 4) setPossession(game, 1 - offIdx, 100 - game.ball);
-            return;
+            return null;
         }
         if (game.down === 4) {
             var d = ot ? ((100 - game.ball) + 17 <= 40 && game.dist > 2 ? 'fg' : 'go') : fourthDownDecision(game, offIdx);
-            if (d === 'punt') { punt(game, offIdx, deps); return; }
-            if (d === 'fg') { fieldGoal(game, offIdx, deps); return; }
+            if (d === 'punt') { punt(game, offIdx, deps); return null; }
+            if (d === 'fg') { fieldGoal(game, offIdx, deps); return null; }
         }
-        runPlay(game, offIdx, deps, false);
-        // In overtime the kickoff after a score must not happen; reset if it did
-        if (ot && game.off !== offIdx && game.ball !== 90 && game.down === 1) { /* possession changed by score or turnover; caller handles */ }
+        return runPlay(game, offIdx, deps, false);
     }
 
     var api = { RULES: RULES, makeTeam: makeTeam, playGame: playGame, chooseOffense: chooseOffense, chooseDefense: chooseDefense,
@@ -778,6 +823,7 @@
                 resetBeliefs: resetBeliefs, observeSnap: observeSnap, applyHunches: applyHunches,
                 situationTags: situationTags, onFieldList: onFieldList, newStats: newStats,
                 fourthDownDecision: fourthDownDecision, setPossession: setPossession, step: step,
+                startGame: startGame, stepGame: stepGame, covBucket: covBucket,
                 kickoff: kickoff, punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
