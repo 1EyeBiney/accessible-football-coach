@@ -127,36 +127,72 @@
         try {
             var blob = new Blob([json], { type: 'application/json' });
             var url = URL.createObjectURL(blob);
+            // A download needs an anchor and there is no other way to start
+            // one from a static page (DESIGN.md 21.10). It exists for one tick
+            // only, is hidden from the screen reader, and is kept out of the
+            // tab order so it can never take focus from the container.
             var a = document.createElement('a');
             a.href = url;
             a.download = name;
+            a.setAttribute('aria-hidden', 'true');
+            a.setAttribute('tabindex', '-1');
+            a.style.position = 'fixed';
+            a.style.left = '-9999px';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            if (el.container && !el.container.hidden) el.container.focus();
             setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
             return true;
         } catch (e) { return false; }
     }
 
+    // The native file picker is the one standard control the game uses,
+    // because there is no other way to read a file and the native dialog is
+    // fully accessible (DESIGN.md 21.10).
+    //
+    // Dismissing that dialog fires no event at all. Without the window focus
+    // fallback below, the input is never removed, focus never comes back to
+    // the container, and the coach is left in silence not knowing whether he
+    // is still in the game. One input was also left in the document on every
+    // attempt.
     function loadFromDisk(onLoaded, onCancel) {
         var input = document.createElement('input');
+        var settled = false;
         input.type = 'file';
         input.accept = 'application/json,.json';
+        input.setAttribute('aria-hidden', 'true');
         input.style.position = 'fixed';
         input.style.left = '-9999px';
         document.body.appendChild(input);
+
+        function cleanup() {
+            window.removeEventListener('focus', onWindowFocus, true);
+            if (input.parentNode) input.parentNode.removeChild(input);
+            if (el.container && !el.container.hidden) el.container.focus();
+        }
+        function cancel() {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (onCancel) onCancel();
+        }
+        function onWindowFocus() {
+            // The dialog has closed. Give the change event a moment to arrive;
+            // if it does not, the coach cancelled.
+            setTimeout(function () { if (!input.files || !input.files.length) cancel(); }, 400);
+        }
+
         input.addEventListener('change', function () {
             var f = input.files && input.files[0];
-            if (!f) { cleanup(); if (onCancel) onCancel(); return; }
+            if (!f) { cancel(); return; }
+            settled = true;
             var reader = new FileReader();
             reader.onload = function () { cleanup(); onLoaded(String(reader.result)); };
             reader.onerror = function () { cleanup(); if (onCancel) onCancel(); };
             reader.readAsText(f);
         });
-        function cleanup() {
-            if (input.parentNode) input.parentNode.removeChild(input);
-            if (el.container) el.container.focus();
-        }
+        window.addEventListener('focus', onWindowFocus, true);
         input.click();
     }
 

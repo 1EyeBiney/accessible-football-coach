@@ -155,13 +155,23 @@
         for (i = 0; i < onField.length; i++) on[onField[i].id] = true;
         for (i = 0; i < all.length; i++) {
             p = all[i];
+            // Recovery has to be slower than the drain, or a starter who plays
+            // every snap of his unit ends the game as fresh as he started it
+            // and nobody is ever substituted. The old numbers drained 2.4 and
+            // recovered 3.2, so across a game where a unit is on the field
+            // about half the time, everybody gained stamina: the lowest figure
+            // on a roster after a full game was eighty two, the substitution
+            // floor is under forty, and so the whole of DESIGN.md 18.3 never
+            // fired once. These are set so a starting lineman is somewhere in
+            // the fifties or sixties by the fourth quarter and dips lower than
+            // that during a long drive.
             if (on[p.id]) {
-                var drain = (p.pos === 'OL' || p.pos === 'DL') ? 2.4 : 1.8;
-                if (p === carrier) drain += 1.2;
-                if (tempo === 'nohuddle') drain += 1.3;
+                var drain = (p.pos === 'OL' || p.pos === 'DL') ? 3.0 : 2.2;
+                if (p === carrier) drain += 1.4;
+                if (tempo === 'nohuddle') drain += 1.6;
                 p.live.stamina = Math.max(0, p.live.stamina - drain);
             } else {
-                p.live.stamina = Math.min(100, p.live.stamina + 3.2);
+                p.live.stamina = Math.min(100, p.live.stamina + 2.4);
             }
         }
     }
@@ -502,11 +512,12 @@
             else if (h.kind === 'adjustment') { team.live.dcHunch = h; team.live.dcHunchAge = 0; }
             else if (h.kind === 'substitution') {
                 // The automatic coach answers "yes, now" (DESIGN.md 18.3). A
-                // team with a human coach leaves the question for him; the
-                // controller turns it into the must-answer report of 19.2.
-                if (team.autoCoach === false) continue;
+                // team with a human coach leaves the question for him, but the
+                // hunch still has to reach the report queue below, or the
+                // controller never turns it into the must-answer of 19.2 and
+                // the coach is never asked at all.
                 p = h.target;
-                if (p && !p.live.out) {
+                if (team.autoCoach !== false && p && !p.live.out) {
                     p.live.benched = true;
                     team.live.subbedSinceSnap = true;
                     store = h.source === 'OC' ? team.live.beliefs.OC : team.live.beliefs.DC;

@@ -267,6 +267,7 @@
         var personnel2 = PL.FORMATIONS[c.lastOffFormation || 'SPREAD'].personnel;
         var dc = c.deps.game.chooseDefense(g, dteam, sit, offTeam, personnel2, 1 - g.off, c.deps);
         var dh = dteam.live.dcHunch;
+        c.lastDefFront = dc.front;
         return { side: 'defense', call: dc, confidence: dh ? dh.confidence : 'guess',
                  text: PL.FRONTS[dc.front].name + ', ' + PL.COVERAGES[dc.coverage].name + ', ' +
                        PL.PRESSURES[dc.pressure].say +
@@ -312,7 +313,7 @@
         var g = c.game, team = g.teams[c.coach];
         var lu = offenseIsCoach(c)
             ? c.deps.game.offenseLineup(team, formation || c.lastFormation || 'SPREAD', c.deps.players, c.deps.plays)
-            : c.deps.game.defenseLineup(team, 'NICKEL', c.deps.plays);
+            : c.deps.game.defenseLineup(team, c.lastDefFront || 'NICKEL', c.deps.plays);
         var on = c.deps.game.onFieldList(lu), out = [], i, p, next;
         for (i = 0; i < on.length; i++) {
             p = on[i];

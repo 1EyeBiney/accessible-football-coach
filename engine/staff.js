@@ -354,8 +354,10 @@
         if (!opts.ownOnField || !opts.ownRoster) return;
         var ev = evalOf(store.member);
         // A good coordinator pulls a man before he gets beaten, a poor one
-        // after the sack (DESIGN.md 18.3).
-        var floor = clamp(38 + (ev - 50) * 0.28, 28, 62);
+        // after the sack (DESIGN.md 18.3). The floor sits just above where a
+        // starter who has played a whole half actually gets to, or the
+        // substitution flow never fires at all.
+        var floor = clamp(45 + (ev - 50) * 0.30, 32, 68);
         var i, p, backup;
         for (i = 0; i < opts.ownOnField.length; i++) {
             p = opts.ownOnField[i];

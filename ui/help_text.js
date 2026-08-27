@@ -27,7 +27,8 @@
         l('P changes the pacing between fast, medium, slow and manual. On manual, the game waits for the spacebar before anything happens on its own.'),
         l('V switches between full and terse. Terse gives you one line a play.'),
         l('Escape goes back one step and tells you where you have ended up.'),
-        l('Q quits. You will be asked to confirm.')
+        l('Q quits. You will be asked to confirm.'),
+        l('Five keys belong to the browser and not to the game: F5 reloads the page, F6 moves to the address bar, F11 is full screen, control R reloads, and control F opens the browser find bar. The game does not handle any of them. F5 and control R will throw away a game in progress, because saving a game is not built yet.')
     ];
 
     var MENU = [
@@ -131,10 +132,13 @@
         q: 'Quit. Asks you to confirm first.',
         ArrowUp: 'Up. Moves back one item in a list.',
         ArrowDown: 'Down. Moves on one item in a list.',
-        ArrowLeft: 'Left. Moves left in a table, or lowers a value.',
-        ArrowRight: 'Right. Moves right in a table, or raises a value.',
+        ArrowLeft: 'Left. Moves left in a table or lowers a value. No screen in this build uses it yet.',
+        ArrowRight: 'Right. Moves right in a table or raises a value. No screen in this build uses it yet.',
         Enter: 'Choose. Takes the item you are on.',
-        ' ': 'Spacebar. Plays a waiting report, or steps the game on when pacing is manual.'
+        ' ': 'Spacebar. Plays a waiting report, or steps the game on when pacing is manual.',
+        F5: 'Reload. This one belongs to the browser and it will throw away a game in progress.',
+        F6: 'Address bar. This one belongs to the browser.',
+        F11: 'Full screen. This one belongs to the browser.'
     };
 
     var MODE_KEYS = {

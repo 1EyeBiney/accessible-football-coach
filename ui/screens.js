@@ -76,12 +76,41 @@
         return app;
     }
 
+    // Only football goes into lastReport. C is the coach's only way back to a
+    // line he missed, because he cannot scroll, so filling it with "Closed."
+    // and "Pacing slow." would take away the key he needs most (DESIGN.md
+    // 21.8).
+    var REAL = { result: true, must: true, cued: true, batched: true };
+
     function say(app, text, priority, source) {
         if (!text) return;
         var clean = U().sanitize(text);
-        app.state.lastReport = clean;
+        priority = priority || 'result';
+        if (REAL[priority] && !app.uiChatter) app.state.lastReport = clean;
         app.lastSaid = clean;
-        app.out.say(clean, priority || 'result', source || null);
+        app.out.say(clean, priority, source || null);
+    }
+
+    // Wraps a bit of interface talk so it does not overwrite the last report.
+    function chatter(app, text) {
+        app.uiChatter = true;
+        say(app, text, 'result');
+        app.uiChatter = false;
+    }
+
+    // Where the coach actually is, right now, for every Escape and every
+    // viewer close. A remembered noun goes stale the moment the game starts.
+    function contextLine(app) {
+        if (app.state.mode === 'game' && app.game) {
+            var line = CTRL().situationLine(app.game);
+            if (app.step === 'offense-suggest' || app.step === 'defense-suggest') {
+                return line + ' ' + (app.suggested ? app.suggested.text : '') + ' Enter accepts.';
+            }
+            if (app.step === 'sub-answer') return line + ' Your coordinator is still waiting on a substitution.';
+            if (app.step === 'advance') return line + ' Press Enter to play on.';
+            return line;
+        }
+        return 'You are at ' + (app.state.lastContext || 'the game') + '.';
     }
 
     function tone(app, name) { if (app.out.tone) app.out.tone(name); }
@@ -146,6 +175,7 @@
         });
         app.state.mode = 'game';
         app.step = null;
+        app.state.lastContext = 'the game';
         flush(app);
         promptNext(app);
     }
@@ -181,7 +211,10 @@
         app.step = null;
         if (p.kind === 'over') {
             app.state.mode = 'final';
-            say(app, 'Press Enter to return to the menu.', 'result');
+            // Batched, so it sorts behind the postgame review rather than in
+            // front of it. Spoken first, it invites the coach to press Enter
+            // and lose the verdicts on his own assistants.
+            say(app, 'Press Enter to return to the menu.', 'batched');
             return;
         }
         if (p.kind === 'substitution') {
@@ -231,9 +264,14 @@
     }
 
     function closeViewer(app) {
+        var kind = app.state.viewer ? app.state.viewer.kind : null;
         app.state.viewer = null;
         tone(app, 'close');
-        say(app, 'Closed. Back at ' + (app.state.lastContext || 'the game') + '.', 'result');
+        // Escape from the call sheet goes back to the formation list, not out
+        // of the flow altogether (DESIGN.md 16.5).
+        if (kind === 'play') { openFormationList(app); return; }
+        chatter(app, 'Closed.');
+        say(app, contextLine(app), 'result');
     }
 
     // ---------- key handling ----------
@@ -242,8 +280,53 @@
     // returns an object when it handled the key and null when it did not, and
     // an active layer swallows a key it does not want rather than letting it
     // fall through to the game.
+    // The keys that reach the coach from anywhere, including from inside a
+    // list or from help. These are the ones he needs most when he has lost his
+    // place, and help calls them the keys that work everywhere, so they have
+    // to actually work everywhere (DESIGN.md 21.8).
+    function globalKey(app, state, key) {
+        if (key.name === 'F1') {
+            if (state.help) {
+                state.help = null;
+                tone(app, 'close');
+                chatter(app, 'Exited help.');
+                say(app, contextLine(app), 'result');
+                return { say: 'closed' };
+            }
+            state.help = U().makeHelp(H().helpFor(exploreMode(state)), 'Help');
+            tone(app, 'open');
+            chatter(app, U().helpAnnounce(state.help));
+            return { say: 'help' };
+        }
+        if (key.name === 'F12') {
+            state.explore = true;
+            chatter(app, 'Keyboard explorer on. Every key you press is described and nothing happens. F12 turns it off.');
+            return { say: 'explore' };
+        }
+        if (key.name === 'c') { say(app, state.lastReport || 'Nothing said yet.', 'result'); return { say: 'repeat' }; }
+        if (key.name === 'p') { chatter(app, U().cyclePacing(state)); return { say: 'pacing' }; }
+        if (key.name === 'v') {
+            var vsay = U().cycleVerbosity(state);
+            if (app.game) CTRL().setVerbosity(app.game, state.verbosity);
+            chatter(app, vsay);
+            return { say: 'verbosity' };
+        }
+        if (key.name === 'Tab') {
+            say(app, app.game ? CTRL().situationLine(app.game) : contextLine(app), 'result');
+            return { say: 'status' };
+        }
+        if (key.name === 'q') {
+            chatter(app, U().askConfirm(state, 'Quit this game and go back to the menu?', function () {
+                app.game = null; state.help = null; state.viewer = null; toMenu(app);
+            }));
+            return { say: 'quit' };
+        }
+        return null;
+    }
+
     function handlers(app) {
         return {
+            global: function (state, key) { return globalKey(app, state, key); },
             confirm: function (state, key) {
                 var r = U().resolveConfirm(state, key);
                 if (r.action) r.action();
@@ -253,10 +336,11 @@
             explore: function (state, key) {
                 if (key.name === 'F12') {
                     state.explore = false;
-                    say(app, 'Keyboard explorer off. Back at ' + (state.lastContext || 'the game') + '.', 'result');
+                    chatter(app, 'Keyboard explorer off.');
+                    say(app, contextLine(app), 'result');
                     return { say: 'off' };
                 }
-                say(app, H().getKeyDescription(key.name, key.shift, key.ctrl, exploreMode(state)), 'result');
+                chatter(app, H().getKeyDescription(key.name, key.shift, key.ctrl, exploreMode(state)));
                 return { say: 'described' };
             },
             help: function (state, key) {
@@ -264,17 +348,33 @@
                 if (key.name === 'Escape' || key.name === 'Enter') {
                     state.help = null;
                     tone(app, 'close');
-                    say(app, 'Exited help. Back at ' + (state.lastContext || 'the game') + '.', 'result');
+                    chatter(app, 'Exited help.');
+                    say(app, contextLine(app), 'result');
                     return { say: 'closed' };
                 }
-                if (key.name === 'ArrowDown') { say(app, U().helpMove(help, 1), 'result'); return { say: 'moved' }; }
-                if (key.name === 'ArrowUp') { say(app, U().helpMove(help, -1), 'result'); return { say: 'moved' }; }
-                if (key.name === 'h') { say(app, U().helpHeading(help, key.shift ? -1 : 1), 'result'); return { say: 'heading' }; }
+                if (key.name === 'ArrowDown') { chatter(app, U().helpMove(help, 1)); return { say: 'moved' }; }
+                if (key.name === 'ArrowUp') { chatter(app, U().helpMove(help, -1)); return { say: 'moved' }; }
+                if (key.name === 'h') { chatter(app, U().helpHeading(help, key.shift ? -1 : 1)); return { say: 'heading' }; }
                 return null;
             },
             viewer: function (state, key) {
                 var v = state.viewer;
                 if (key.name === 'Escape') { closeViewer(app); return { say: 'closed' }; }
+                // DESIGN.md 16.5 puts both of these at the formation prompt.
+                if (v.kind === 'formation' && key.name === 'n') {
+                    app.pendingTempo = 'nohuddle';
+                    state.viewer = null;
+                    chatter(app, 'No huddle. Same personnel, and they do not get a clean substitution.');
+                    if (app.suggested && app.suggested.play) callPlay(app, app.suggested.play.id, 'nohuddle');
+                    return { say: 'nohuddle' };
+                }
+                if (v.kind === 'formation' && key.name === 'u') {
+                    var pick = U().menuSelect(v.menu);
+                    app.pickedFormation = pick ? pick.id : app.pickedFormation;
+                    state.viewer = null;
+                    openSubList(app);
+                    return { say: 'subs' };
+                }
                 if (v.grid) {
                     if (key.name === 'ArrowUp') return gridStep(app, v, -1, 0);
                     if (key.name === 'ArrowDown') return gridStep(app, v, 1, 0);
@@ -335,33 +435,8 @@
     // ---------- the mode branch ----------
 
     function modeKey(app, state, key) {
-        var C = CTRL();
-        // Keys that work everywhere (DESIGN.md 21.8)
-        if (key.name === 'F1') {
-            state.help = U().makeHelp(H().helpFor(state.mode), 'Help');
-            tone(app, 'open');
-            say(app, U().helpAnnounce(state.help), 'result');
-            return { say: 'help' };
-        }
-        if (key.name === 'F12') {
-            state.explore = true;
-            say(app, 'Keyboard explorer on. Every key you press is described and nothing happens. F12 turns it off.', 'result');
-            return { say: 'explore' };
-        }
-        if (key.name === 'p') { say(app, U().cyclePacing(state), 'result'); return { say: 'pacing' }; }
-        if (key.name === 'v') {
-            var v = U().cycleVerbosity(state);
-            if (app.game) CTRL().setVerbosity(app.game, state.verbosity);
-            say(app, v, 'result');
-            return { say: 'verbosity' };
-        }
-        if (key.name === 'c') { say(app, state.lastReport || 'Nothing said yet.', 'result'); return { say: 'repeat' }; }
-        if (key.name === 'q') {
-            say(app, U().askConfirm(state, 'Quit this game and go back to the menu?', function () {
-                app.game = null; toMenu(app);
-            }), 'result');
-            return { say: 'quit' };
-        }
+        // The keys that work everywhere are handled by the global layer above,
+        // so that they also reach the coach from inside a list or from help.
         if (state.mode === 'menu') return menuScreenKey(app, state, key);
         if (state.mode === 'team') return teamScreenKey(app, state, key);
         if (state.mode === 'pregame') return pregameKey(app, state, key);
@@ -507,16 +582,22 @@
         if (app.step === 'sub-answer') return subAnswerKey(app, key);
         if (app.step === 'advance') {
             if (key.name === 'Enter') { doAdvance(app); return { say: 'advance' }; }
+            if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
             return null;
         }
         if (app.step === 'offense-suggest') return offenseKey(app, key);
         if (app.step === 'defense-suggest') return defenseKey(app, key);
-        if (key.name === 'Escape') { say(app, C.situationLine(g), 'result'); return { say: 'here' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
 
     function subAnswerKey(app, key) {
         var map = { y: 'yes', n: 'no', l: 'change', k: 'dead' };
+        if (key.name === 'Escape') {
+            say(app, 'Your coordinator needs an answer first. Y takes him out now, N leaves him in, ' +
+                     'L at the next personnel change, K at the next dead ball.', 'must');
+            return { say: 'still waiting' };
+        }
         if (!map[key.name]) return null;
         emit(app, CTRL().answerSubstitution(app.game, map[key.name]));
         promptNext(app);
@@ -543,7 +624,7 @@
                              : 'Not called yet this season.', 'result');
             return { say: 'detail' };
         }
-        if (key.name === 'Escape') { say(app, C.situationLine(app.game) + ' ' + app.suggested.text, 'result'); return { say: 'here' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
 
@@ -555,7 +636,7 @@
         }
         if (key.name === 'f') { openDefensePart(app, 'front'); return { say: 'fronts' }; }
         if (key.name === 'u') { openSubList(app); return { say: 'subs' }; }
-        if (key.name === 'Escape') { say(app, C.situationLine(app.game) + ' ' + app.suggested.text, 'result'); return { say: 'here' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
 
@@ -570,11 +651,16 @@
 
     function openPlayList(app) {
         var sheet = CTRL().callSheet(app.game, app.pickedFormation);
-        if (!sheet.length) { say(app, 'Nothing on the sheet for that formation here.', 'result'); promptNext(app); return; }
+        if (!sheet.length) {
+            chatter(app, 'Nothing on the sheet for that formation on this down. Pick another.');
+            openFormationList(app);
+            return;
+        }
         var menu = U().makeMenu(sheet.map(function (p) { return { id: p.id, text: p.text }; }),
-                                'The call sheet for this down and distance.');
+                                'The call sheet for this down and distance. Escape goes back to the formations.');
         app.state.viewer = { kind: 'play', menu: menu };
-        say(app, U().menuAnnounce(menu), 'result');
+        tone(app, 'open');
+        chatter(app, U().menuAnnounce(menu));
     }
 
     function openSubList(app) {
@@ -589,9 +675,14 @@
     function doSubstitution(app, item) {
         var s = item.sub;
         if (!s || !s.replacement) { say(app, 'There is nobody behind him.', 'result'); return; }
+        if (s.player.live.benched) { say(app, s.player.name + ' is already off.', 'result'); return; }
         s.player.live.benched = true;
+        var onOffense = app.game.game.off === app.game.coach;
         app.game.game.teams[app.game.coach].live.subbedSinceSnap = true;
-        say(app, s.player.name + ' comes out, ' + s.replacement.name + ' goes in. That is a substitution, so they get to reset too.', 'result');
+        say(app, s.player.name + ' comes out, ' + s.replacement.name + ' goes in.' +
+                 (onOffense ? ' That is a substitution, so they get to reset too.' : ''), 'result');
+        // Rebuild, so arrowing back to the same name does not offer him again.
+        openSubList(app);
     }
 
     var DEF_PARTS = ['front', 'coverage', 'pressure', 'adjustment'];
@@ -633,7 +724,7 @@
         emit(app, said);
         if (app.game && CTRL().pending(app.game).kind === 'over') {
             app.state.mode = 'final';
-            say(app, 'Press Enter to return to the menu.', 'result');
+            say(app, 'Press Enter to return to the menu.', 'batched');
             return;
         }
         promptNext(app);

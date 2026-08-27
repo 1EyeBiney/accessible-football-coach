@@ -89,7 +89,11 @@
 
     // ---------- pacing (DESIGN.md 21.8) ----------
 
-    var PACING = { fast: 20, medium: 35, slow: 55, manual: -1 };
+    // Milliseconds per character. A screen reader at its default rate reads
+    // roughly fifteen to eighteen characters a second, so anything under about
+    // fifty five milliseconds a character means the next automatic line
+    // interrupts the one before it half way through.
+    var PACING = { fast: 45, medium: 70, slow: 100, manual: -1 };
     var PACING_ORDER = ['fast', 'medium', 'slow', 'manual'];
 
     // How long to wait before the next automatic thing happens, from the
@@ -98,7 +102,7 @@
         var perChar = PACING[mode];
         if (perChar === undefined) perChar = PACING.medium;
         if (perChar < 0) return -1;
-        return Math.min(9000, 400 + String(text || '').length * perChar);
+        return Math.min(20000, 600 + String(text || '').length * perChar);
     }
 
     // ---------- menus (DESIGN.md 21.4) ----------
@@ -243,7 +247,12 @@
     // and a handler is a function (state, key) returning either null, meaning
     // it did not handle the key, or { say, done, action } meaning it did.
 
-    var INTERCEPTORS = ['confirm', 'explore', 'help', 'viewer', 'mode'];
+    // The stack, top first. confirm, help and viewer swallow anything they do
+    // not want, which is the input firewall. global and mode fall through, so
+    // the quick status keys reach the coach from inside a list or from help:
+    // they are the keys he needs most when he has lost his place.
+    var INTERCEPTORS = ['confirm', 'explore', 'global', 'help', 'viewer', 'mode'];
+    var FALLS_THROUGH = { global: true, mode: true };
 
     function newState(mode) {
         return { mode: mode || 'boot', confirm: null, explore: false, help: null,
@@ -263,7 +272,7 @@
             if (out) { out.layer = name; return out; }
             // An active layer swallows the key even when it does nothing with
             // it, which is the whole point of the firewall.
-            if (name !== 'mode') return { say: null, swallowed: true, layer: name };
+            if (!FALLS_THROUGH[name]) return { say: null, swallowed: true, layer: name };
         }
         return { say: null, swallowed: false, layer: null };
     }
@@ -273,7 +282,7 @@
         if (name === 'explore') return !!state.explore;
         if (name === 'help') return !!state.help;
         if (name === 'viewer') return !!state.viewer;
-        return true;  // the mode branch is always there
+        return true;  // global and the mode branch are always there
     }
 
     // ---------- confirmations (DESIGN.md 21.7) ----------
@@ -345,7 +354,8 @@
         makeGrid: makeGrid, gridAnnounce: gridAnnounce, gridMove: gridMove, gridCell: gridCell,
         makeAllocation: makeAllocation, allocAnnounce: allocAnnounce, allocMove: allocMove,
         allocAdjust: allocAdjust, allocSpare: allocSpare, allocLine: allocLine, allocCurrent: allocCurrent,
-        newState: newState, dispatch: dispatch, INTERCEPTORS: INTERCEPTORS, layerActive: layerActive,
+        newState: newState, dispatch: dispatch, INTERCEPTORS: INTERCEPTORS,
+        FALLS_THROUGH: FALLS_THROUGH, layerActive: layerActive,
         askConfirm: askConfirm, resolveConfirm: resolveConfirm,
         makeHelp: makeHelp, helpAnnounce: helpAnnounce, helpMove: helpMove, helpHeading: helpHeading,
         cyclePacing: cyclePacing, cycleVerbosity: cycleVerbosity

@@ -237,5 +237,96 @@ module.exports = function (t) {
     n = d4.count();
     d4.key('Escape');
     t.eq(d4.app.state.viewer, null, 'Escape closes the list');
-    t.ok(d4.since(n).indexOf('Back at') >= 0, 'closing a list says where the coach has ended up');
+    var closed = d4.since(n);
+    t.ok(closed.indexOf('Closed') >= 0, 'closing a list says it closed');
+    t.ok(/first|second|third|fourth/.test(closed), 'closing a list re-announces the live situation, not a remembered label');
+    t.ok(closed.indexOf('Enter accepts') >= 0, 'closing a list reminds the coach what he still has to answer');
+
+    // ---------- the keys that work everywhere really do ----------
+    // These live above help and the viewers in the stack, because they are the
+    // keys a coach needs most when he has lost his place (DESIGN.md 21.8).
+    var d5 = driver(AF);
+    AF.screens.boot(d5.app);
+    d5.key('Enter').key('Enter').key('Enter');
+    var g3 = 0;
+    while (d5.app.step !== 'offense-suggest' && g3++ < 400) {
+        if (d5.app.step === 'sub-answer') d5.key('n');
+        else d5.key('Enter');
+    }
+    var resultLine = d5.spoken[d5.count() - 2] ? d5.spoken[d5.count() - 2].text : '';
+    d5.key('f');
+    t.ok(d5.app.state.viewer !== null, 'the formation list is open');
+    n = d5.count();
+    d5.key('Tab');
+    t.ok(d5.since(n).length > 0, 'Tab answers from inside a list');
+    n = d5.count();
+    d5.key('c');
+    t.ok(d5.since(n).length > 0, 'C answers from inside a list');
+    t.ok(d5.app.state.viewer !== null, 'the quick keys do not close the list');
+    n = d5.count();
+    d5.key('F1');
+    t.ok(d5.app.state.help !== null, 'F1 opens help from inside a list');
+    n = d5.count();
+    d5.key('F1');
+    t.eq(d5.app.state.help, null, 'F1 closes help again');
+    n = d5.count();
+    d5.key('F12');
+    t.ok(d5.app.state.explore, 'F12 turns the explorer on from inside a list');
+    d5.key('F12');
+    t.ok(!d5.app.state.explore, 'F12 turns it off again');
+    t.ok(d5.app.state.viewer !== null, 'the list survived all of that');
+    d5.key('Escape');
+
+    // ---------- C repeats football, not interface chatter ----------
+    var d6 = driver(AF);
+    AF.screens.boot(d6.app);
+    d6.key('Enter').key('Enter').key('Enter');
+    var g4 = 0;
+    while (d6.app.game.log.length < 3 && g4++ < 400) {
+        if (d6.app.state.viewer) d6.key('Escape');
+        else if (d6.app.step === 'sub-answer') d6.key('n');
+        else d6.key('Enter');
+    }
+    d6.key('p');            // pacing, pure interface chatter
+    d6.key('v');            // verbosity, likewise
+    n = d6.count();
+    d6.key('c');
+    var repeated = d6.since(n);
+    t.ok(repeated.indexOf('Pacing') < 0, 'C does not repeat the pacing setting');
+    t.ok(repeated.indexOf('Verbosity') < 0, 'C does not repeat the verbosity setting');
+    t.ok(repeated.length > 20, 'C repeats something of substance');
+
+    // ---------- Shift and Caps Lock ----------
+    // main.js lower-cases a single character before it reaches here, so the
+    // handlers only ever see lower case with a shift flag. Shift plus H has to
+    // work, because the first line of help promises it does.
+    var d7 = driver(AF);
+    AF.screens.boot(d7.app);
+    d7.key('F1');
+    d7.key('h');            // forward to the first heading
+    d7.key('h');            // and the second
+    n = d7.count();
+    d7.key('h', true);      // shift H, back one heading
+    t.ok(d7.since(n).toLowerCase().indexOf('heading') >= 0, 'Shift H moves back to the previous heading');
+
+    // ---------- the substitution gate says why it will not let go ----------
+    var d8 = driver(AF);
+    AF.screens.boot(d8.app);
+    d8.key('Enter').key('Enter').key('Enter');
+    var g5 = 0, hitGate = false;
+    while (g5++ < 3000 && d8.app.state.mode !== 'final') {
+        if (d8.app.step === 'sub-answer') {
+            n = d8.count();
+            d8.key('Escape');
+            t.ok(d8.since(n).indexOf('needs an answer') >= 0, 'the substitution gate explains itself rather than going quiet');
+            t.eq(d8.app.step, 'sub-answer', 'the substitution gate does not let go until it is answered');
+            d8.key('y');
+            hitGate = true;
+            break;
+        }
+        if (d8.app.state.viewer) { d8.key('Escape'); continue; }
+        if (d8.app.state.mode === 'halftime') { d8.key('Enter'); continue; }
+        d8.key('Enter');
+    }
+    t.ok(hitGate, 'a substitution was asked for at some point in the game');
 };
