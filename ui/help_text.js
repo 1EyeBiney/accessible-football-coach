@@ -69,8 +69,8 @@
         l('E does the same for the defense.'),
         l('The third setting is the one most coaches use. The game runs itself and stops you on third and fourth down, in the red zone, in the last two minutes, and when a coordinator is sure about something.'),
         h('Saving'),
-        l('G writes the game to a file on your disk.'),
-        l('Shift G opens your file picker to load one back.')
+        l('G writes the play by play to a file on your disk and puts it on the clipboard as well.'),
+        l('Saving a whole game so you can come back to it is not built yet. If you reload the page you will lose the game in progress.')
     ];
 
     var MENU_SCREENS = [

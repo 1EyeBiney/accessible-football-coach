@@ -199,9 +199,13 @@
         var reads = [], i, role, rcv, dfd, sep, zone = !cov.man, depth = concept.depth;
         // Fewer defenders in coverage loosens every route. This is the general
         // effect; which concepts profit most from a blitz is the concept's own
-        // vsPress row, already added into schemeMod above, so this term is
-        // kept small to avoid paying the quick game twice for the same blitz.
-        var thin = pp.rushers >= 6 ? 4 : (pp.rushers === 5 ? 2 : 0);
+        // vsPress row, already added into schemeMod above.
+        //
+        // It has to be big enough that bringing more rushers is a trade rather
+        // than a free win. Tuned too low, yards allowed fell monotonically as
+        // the defense brought more men, so an all-out blitz on every snap was
+        // simply the best defense in the game.
+        var thin = pp.rushers >= 6 ? 7 : (pp.rushers === 5 ? 3.5 : 0);
         for (i = 0; i < concept.reads.length; i++) {
             role = concept.reads[i]; rcv = lu[role];
             if (!rcv) continue;
@@ -218,11 +222,17 @@
             // 8.3). A defender committed to one receiver is a defender who is
             // not on the others, and that opening is what lets the offense
             // move before the counter lands.
+            //
+            // The cost has to stay smaller than the benefit, though, or the
+            // adjustment is worse than doing nothing and the defense should
+            // never call it. The first version of this opened the other
+            // receivers by six and made bracketing the best receiver worth two
+            // yards a snap to the offense, which is the wrong way round.
             var help = 0;
-            if (adj === 'BRACKET') help += (role === 'WR1' ? -12 : 6);
-            if (adj === 'HELP') help += (role === 'WR1' && depth !== 'short' ? -9 : 4);
-            if (adj === 'LOAD') help += 5;   // a safety in the box is a safety out of coverage
-            if (adj === 'SPY') help += 4;    // the spy is neither rushing nor covering
+            if (adj === 'BRACKET') help += (role === 'WR1' ? -16 : 3);
+            if (adj === 'HELP') help += (role === 'WR1' && depth !== 'short' ? -12 : 2);
+            if (adj === 'LOAD') help += 3;   // a safety in the box is a safety out of coverage
+            if (adj === 'SPY') help += 2;    // the spy is neither rushing nor covering
             if (adj === 'CONTAIN' && (concept.screen || concept.pa)) help -= 5;
             sep += help + rng.normal(0, 7);
             // edge is the part of the separation that is the receiver beating
@@ -295,7 +305,12 @@
             }
             yac += Math.max(0, choice.sep) * 0.04;
             yac = Math.max(0, yac);
-            var pBreak = concept.yac * 0.05 + (eff(choice.rcv, 'spd') - eff(tackler, 'spd')) * 0.002 + (cov.deep === 0 ? 0.05 : cov.deep === 1 ? 0.02 : 0);
+            // A coverage with nobody deep is a coverage with nobody to stop a
+            // catch turning into a touchdown. This is the price of an all out
+            // blitz, and without it bringing everybody was simply the best
+            // defense in the game on every down.
+            var pBreak = concept.yac * 0.05 + (eff(choice.rcv, 'spd') - eff(tackler, 'spd')) * 0.002 +
+                         (cov.deep === 0 ? 0.16 : cov.deep === 1 ? 0.06 : 0);
             if (rng.chance(clamp(pBreak, 0.005, 0.25))) {
                 yac += rng.uniform(15, 40);
                 events.push({ kind: 'breakaway', by: choice.rcv, say: choice.rcv.name + ' broke free' });
@@ -307,7 +322,7 @@
             res.clockRuns = true;
             res.oob = rng.chance(depth === 'short' ? 0.18 : 0.25);
             // fumble after the catch
-            if (rng.chance(clamp(0.007 - (eff(choice.rcv, 'hnd') - 45) * 0.0001, 0.001, 0.02))) res.fumble = true;
+            if (rng.chance(clamp(0.013 - (eff(choice.rcv, 'hnd') - 45) * 0.0002, 0.002, 0.035))) res.fumble = true;
             return res;
         }
         // Not complete: interception, breakup, or plain incompletion
@@ -377,7 +392,10 @@
         }
         var edge = avg(edges);
         edge += ((concept.vsBox[bw.weight] || 0) + (concept.vsPress[ctx.call.pressure] || 0)) * es * 2.2;
-        if (adj === 'CONTAIN') edge += (poa === 'outside' ? -8 : 3);
+        // Contain is the one adjustment whose whole purpose is the run. It has
+        // to bite hard on the edge and give something back inside, or it does
+        // nothing measurable to the run game at all.
+        if (adj === 'CONTAIN') edge += (poa === 'outside' ? -12 : 2);
         if (ctx.def.misaligned) edge += 7;
         // A fast-flowing linebacker corps reads the play: their read ability against execution
         var readPen = (eff(lbs[0] || dline[0], 'rdd') - 45) * 0.15 - (ctx.play.exec - 50) * 0.08;
@@ -415,7 +433,8 @@
                 yacon += 3 + rng.normal(0, 3);
                 events.push({ kind: 'brokeTackle', by: carrier, say: carrier.name + ' broke a tackle' });
                 var safety = dl.DB[3] || dl.DB[2] || dl.DB[0];
-                var pBreakaway = clamp(0.05 + (eff(carrier, 'spd') - eff(safety, 'spd')) * 0.005 + (cov.deep === 0 ? 0.10 : cov.deep === 1 ? 0.04 : 0), 0.01, 0.4);
+                var pBreakaway = clamp(0.05 + (eff(carrier, 'spd') - eff(safety, 'spd')) * 0.005 +
+                                       (cov.deep === 0 ? 0.20 : cov.deep === 1 ? 0.07 : 0), 0.01, 0.45);
                 res.tackler = safety;
                 if (rng.chance(pBreakaway)) {
                     yacon += rng.uniform(12, 45);
@@ -429,7 +448,9 @@
         res.broke = broke;
         res.clockRuns = true;
         res.oob = poa === 'outside' ? rng.chance(0.2) : rng.chance(0.04);
-        var pFum = clamp(0.012 - (eff(carrier, 'hnd') - 45) * 0.0002 + (broke ? 0.005 : 0), 0.002, 0.03);
+        // Tuned up: fumbles lost were running at about four tenths of a game
+        // against a target of about one.
+        var pFum = clamp(0.022 - (eff(carrier, 'hnd') - 45) * 0.0003 + (broke ? 0.008 : 0), 0.004, 0.05);
         if (rng.chance(pFum)) res.fumble = true;
         // Holding when badly beaten
         if (we < -8 && rng.chance(0.10)) res.penalty = { on: 'O', kind: 'holding', yards: 10 };

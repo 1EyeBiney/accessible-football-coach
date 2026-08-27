@@ -572,10 +572,24 @@
             return { say: 'mode' };
         }
         if (key.name === 'g') {
-            var json = JSON.stringify({ note: 'Saving the full run is not built yet.', log: app.game.log });
-            if (key.shift) { say(app, 'Loading is not built yet.', 'result'); return { say: 'todo' }; }
-            say(app, root.AF.dom && root.AF.dom.saveToDisk('accessible-football-log.json', json)
-                ? 'Play by play written to a file.' : 'Could not write the file.', 'result');
+            // Saving a whole run is not built. What can be saved tonight is
+            // the play by play, which goes to a file and to the clipboard so
+            // it can be pasted somewhere and read back (DESIGN.md 21.6 copies
+            // the scorecard the same way).
+            if (key.shift) {
+                say(app, 'Loading a saved game is not built yet. Nothing has been lost; the game is still here.', 'result');
+                return { say: 'todo' };
+            }
+            var text = app.game.log.join('\n');
+            var dom = root.AF.dom;
+            var wrote = dom ? dom.saveToDisk('accessible-football-play-by-play.txt', text) : false;
+            var copied = dom ? dom.copyToClipboard(text) : false;
+            var parts = [];
+            if (wrote) parts.push('Play by play written to a file.');
+            if (copied) parts.push('It is on the clipboard too.');
+            if (!wrote && !copied) parts.push('Could not save the play by play.');
+            parts.push('Saving a whole game is not built yet.');
+            say(app, parts.join(' '), 'result');
             return { say: 'save' };
         }
 

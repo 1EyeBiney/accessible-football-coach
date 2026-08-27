@@ -110,15 +110,47 @@
 
     // ---------- lineups ----------
 
+    // Who fills in when a position has nobody left standing. Preference goes
+    // to the nearest thing to the job, then to anybody healthy, and only then
+    // to anybody at all, because eleven men have to line up.
+    var COVER_FOR = {
+        QB: ['RB', 'WR', 'TE'], RB: ['WR', 'TE', 'LB'], WR: ['RB', 'TE', 'DB'],
+        TE: ['WR', 'OL', 'LB'], OL: ['TE', 'DL'], DL: ['OL', 'LB'],
+        LB: ['TE', 'DL', 'DB'], DB: ['WR', 'LB'], K: ['P'], P: ['K']
+    };
+
+    function emergency(team, pos) {
+        var order = (COVER_FOR[pos] || []).slice();
+        var byId = team.roster.byId, d = team.roster.depth, i, j, ids, cand;
+        for (i = 0; i < order.length; i++) {
+            ids = d[order[i]] || [];
+            for (j = ids.length - 1; j >= 0; j--) {     // the last man on that chart
+                cand = byId[ids[j]];
+                if (cand && !cand.live.out && !cand.live.benched) return cand;
+            }
+        }
+        var all = team.roster.players;
+        for (i = 0; i < all.length; i++) if (!all[i].live.out && !all[i].live.benched) return all[i];
+        for (i = 0; i < all.length; i++) if (!all[i].live.out) return all[i];
+        return all[0];
+    }
+
     function offenseLineup(team, formation, P, PL) {
         var d = team.roster.depth, byId = team.roster.byId;
         var lu = {}, i;
         // A player who is out, or who the coordinator has pulled to get his
         // legs back (DESIGN.md 18.3), is not available.
+        //
+        // If a position is wiped out entirely, somebody else plays there. A
+        // high school team that loses both quarterbacks puts an athlete under
+        // centre; it does not field ten men. Without this the engine crashed
+        // about once in every three thousand games, when both quarterbacks on
+        // one roster were injured out of the same game.
         function pick(pos, idx) {
             var ids = d[pos].filter(function (id) { return !byId[id].live.out && !byId[id].live.benched; });
             if (!ids.length) ids = d[pos].filter(function (id) { return !byId[id].live.out; });
-            return byId[ids[idx]] || byId[ids[ids.length - 1]] || null;
+            var p = byId[ids[idx]] || byId[ids[ids.length - 1]] || null;
+            return p || emergency(team, pos);
         }
         lu.QB1 = pick('QB', 0); lu.RB1 = pick('RB', 0); lu.RB2 = pick('RB', 1);
         lu.TE1 = pick('TE', 0); lu.TE2 = pick('TE', 1);
@@ -137,7 +169,9 @@
         function take(pos, n) {
             var ids = d[pos].filter(function (id) { return !byId[id].live.out && !byId[id].live.benched; });
             if (ids.length < n) ids = d[pos].filter(function (id) { return !byId[id].live.out; });
-            return ids.slice(0, n).map(function (id) { return byId[id]; });
+            var out = ids.slice(0, n).map(function (id) { return byId[id]; });
+            while (out.length < n) out.push(emergency(team, pos));   // never field a short unit
+            return out;
         }
         return { DL: take('DL', f.dl), LB: take('LB', f.lb), DB: take('DB', f.db) };
     }
@@ -343,8 +377,9 @@
             if (rng.chance(0.015)) ret = Math.round(rng.uniform(46, 70));
             if (rng.chance(0.004)) ret = 100;
             line = Math.min(100, ret);
-            text = line >= 100 ? 'kickoff returned all the way for a touchdown'
-                               : 'kickoff returned to the ' + spot(line);
+            text = line >= 100
+                ? 'kickoff returned all the way for a touchdown by ' + game.teams[recv].name
+                : 'kickoff returned to the ' + spot(line);
         }
         game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
         game.clock = Math.max(0, game.clock - 5);
@@ -416,6 +451,28 @@
     // ---------- game state helpers ----------
 
     function spot(ball) { return ball <= 50 ? 'own ' + ball : 'opponent ' + (100 - ball); }
+
+    // Walking the offense back. The ball never goes past half the distance to
+    // the goal line, and the line to gain moves only as far as the ball does,
+    // which is what stops a series reading second and forty five while the
+    // ball has moved four yards.
+    function markOff(game, yards) {
+        var before = game.ball;
+        var most = Math.floor(before / 2);          // half the distance to the goal
+        var moved = Math.min(yards, most);
+        game.ball = Math.max(1, before - moved);
+        game.dist += (before - game.ball);
+        game.dist = Math.min(game.dist, 99);
+        fixGoalToGo(game);
+    }
+
+    // Goal to go is a fact about where the ball is, not a label that sticks.
+    // A penalty that puts the ball outside the ten makes it first and ten
+    // again, or second and twelve, rather than leaving it reading goal.
+    function fixGoalToGo(game) {
+        var toGoal = 100 - game.ball;
+        if (game.dist > toGoal) game.dist = toGoal;
+    }
 
     function setPossession(game, idx, ball) {
         game.off = idx; game.ball = clamp(ball, 1, 99); game.down = 1; game.dist = Math.min(10, 100 - game.ball);
@@ -671,12 +728,13 @@
             return res;
         }
         if (res.penalty && res.penalty.preSnap) {
-            if (res.penalty.on === 'O') { game.ball = Math.max(1, game.ball - res.penalty.yards); game.dist += res.penalty.yards; }
+            if (res.penalty.on === 'O') { markOff(game, res.penalty.yards); }
             else { game.ball = Math.min(99, game.ball + res.penalty.yards); game.dist -= res.penalty.yards; if (game.dist <= 0) { game.down = 1; game.dist = Math.min(10, 100 - game.ball); } }
         } else if (res.penalty && res.penalty.on === 'D' && res.penalty.autoFirst) {
             game.ball = Math.min(99, game.ball + res.penalty.yards); game.down = 1; game.dist = Math.min(10, 100 - game.ball);
+            fixGoalToGo(game);
         } else if (res.penalty && res.penalty.on === 'O') {
-            game.ball = Math.max(1, game.ball - res.penalty.yards); game.dist += res.penalty.yards; // holding, replay the down
+            markOff(game, res.penalty.yards);   // holding, replay the down
         } else if (res.outcome === 'interception') {
             turnover = true;
             var spotBall = clamp(game.ball + res.yards - res.retYards, 1, 99);
@@ -702,7 +760,7 @@
             text += ', timeout ' + game.teams[defIdx].name;
             described.terse += ', timeout ' + game.teams[defIdx].name;
         }
-        game.clock = Math.max(0, game.clock - secs);
+        if (!game.ot) game.clock = Math.max(0, game.clock - secs);
         game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'play',
                         text: text, terse: described.terse, res: res });
         game.drivePlays++;
@@ -712,9 +770,15 @@
             score(game, offIdx, 6, deps); tryPAT(game, offIdx, deps);
             if (!game.ot) kickoff(game, offIdx, deps);
         } else if (safety) {
-            game.log.push({ q: game.quarter, clock: game.clock, team: defIdx, kind: 'safety', text: 'Safety' });
+            game.log.push({ q: game.quarter, clock: game.clock, team: defIdx, kind: 'safety',
+                            text: 'Safety, two points for ' + game.teams[defIdx].name });
             game.score[defIdx] += 2;
-            setPossession(game, defIdx, 40); // free kick, simplified
+            // The team that gave up the safety free kicks from its own twenty.
+            var fk = Math.round(clamp(game.rng.normal(45, 7), 25, 60));
+            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'freekick',
+                            text: 'free kick of ' + fk + ' yards after the safety' });
+            game.clock = Math.max(0, game.clock - 6);
+            setPossession(game, defIdx, clamp(fk - 5, 15, 60));
         } else if (!turnover && game.down > 4) {
             game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'downs', text: 'Turnover on downs' });
             setPossession(game, defIdx, 100 - game.ball);
@@ -758,7 +822,10 @@
         else body = (res.carrier ? res.carrier.name : 'Run') + ' for ' + (res.yards < 0 ? 'a loss of ' + (-res.yards) : res.yards) + (res.broke ? ', broke a tackle' : '') + '.';
         var ev = res.events && res.events.length ? ' (' + res.events.map(function (e) { return e.say; }).join('; ') + ')' : '';
         if (res.fumble) body += ' Fumble, ' + (res.fumbleLost ? 'lost' : 'recovered') + '.';
-        if (res.penalty && !res.penalty.preSnap) body += ' Penalty, ' + res.penalty.kind + '.';
+        if (res.penalty && !res.penalty.preSnap) {
+            body += ' Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards' +
+                    (res.penalty.autoFirst ? ' and an automatic first down' : '') + '.';
+        }
         return head + call + body + ev;
     }
 
@@ -822,13 +889,18 @@
     }
 
     // Overtime: alternating possessions from the ten (DESIGN.md 25).
+    var OT_WORD = ['', 'one', 'two', 'three', 'four', 'five', 'six'];
+
     function beginOt(game, deps) {
         game.ot = true;
         game.otRound = 1;
         game.otIndex = 0;
         game.otFirst = 0;
         game.quarter = 5;
-        game.clock = 9999;
+        // High school overtime is untimed. The old sentinel of 9999 seconds
+        // was being printed as a game clock, so the play by play read "one
+        // hundred and sixty six minutes" and counted down from there.
+        game.clock = 0;
         game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period one' });
         setPossession(game, game.otFirst, 90);
     }
@@ -850,7 +922,9 @@
         game.otIndex = 0;
         game.otFirst = 1 - game.otFirst;
         game.quarter = 4 + game.otRound;
-        game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period ' + game.otRound });
+        game.clock = 0;
+        game.log.push({ q: game.quarter, clock: 0, kind: 'ot',
+                        text: 'Overtime period ' + (OT_WORD[game.otRound] || game.otRound) });
         setPossession(game, game.otFirst, 90);
         return res;
     }
