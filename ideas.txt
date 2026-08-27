@@ -1,0 +1,137 @@
+I have given our design document to Gemini and GPT for their evaluations and to get ideas of where and what to work on. Here is some of hte feedback from them and my responses. Please update our design document with the results of this prompt, ask any followup questions if they arise and then let's discuss creating the actual gameplay engine as this is what we will porobably need to iron out and text and get right first.
+
+
+
+Improvement: Introduce a dedicated "skip to prompt" hotkey that immediately interrupts the speech queue and opens the call sheet. This allows veteran players to maintain a fast pace once they recognize a situation.  
+response: after a play, if there if there is a report, we should here a sound and the player can hit a button to hear that report, we might have 3 different sounds for offensive coordinator, defensive coordinator and spotter. I do not anticipate hearing reports after every play so I do not think it would be cognitive overload. If a player is on offense, then the d-coordinqator won't say much.
+If a player comes out of a game due to injury, they cannot re-enter.
+I am imagining an in-game play clock with gameplay adjustable settings so a human player can feel like they are playing against a clock.
+After a play, the user gets prompted for formation for next play, then play. After picking formation, they can hit a button to substitute and probably use arrow keys to move through players and hit a button to sub that player out.
+If a coordinator reports that a player needs substituted and that substitution happens, then the coordinator needs to report that that player is now ready again to resume their position on the first team. This announcement would happen when that unit takes the field on a change of possession.
+
+We do not need to generate spoken audio using AI models. we need to produce text that fits the game situation but not actual audio, I don't think most machines that I"m making this for would handle it and if that changes I think we can add that later.
+at the major college and pro levels, rather than choosing 10 plays to practice, you choose a formation to work on that week which gives bonuses to all plays in that formation.. At major college and pro levels, rather than using practice to affect games we would use film study as a means of locating advantages during game play.
+
+Improvement: While functional for a small college with limited targets, a major college program will pursue many more recruits. Navigating a massive list with just arrow keys will become tedious. Implement hotkeys to instantly filter the board by position or program standing.  
+question: How do you plan to handle saving and recovery if the user's browser automatically clears their local storage data?
+the local browser can save data in case of crashes and such, but we will have to offer players the ability to save games to their disk locally for the best experience.
+
+Suggestion I approve:
+I would make delegation a first-class game mechanic, rather than merely a convenience.
+For almost every management system, give the player three levels: automatic, priorities only, and full control. For example, I could tell my OC, “Prioritize film and quarterback development,” and let him allocate his own Focus. I should only have to manipulate his percentages individually if I choose to micromanage.
+I'd do the same on game day with three modes for each side of the ball: I call everything; coordinator calls everything; coordinator calls normally but stops for important decisions.
+That third option could be excellent. The game automatically advances until something such as third/fourth down, red zone, two-minute situation, a major new matchup discovery, injury, or high-confidence adjustment happens.
+That could turn a 130-snap game into perhaps 25–40 meaningful coaching decisions without sacrificing the simulation.
+
+The computer coach is never omniscient. It makes decisions from the same imperfect information model available to the player's staff.
+That one requirement will affect a lot of engine decisions later.
+
+Every non-player-controlled team eventually needs some simplified version of coaching, player development, recruiting, staff turnover, game results, roster aging/graduation, coach firing and hiring.
+It does not need to use the full human-facing simulation. A lightweight NPC simulation would be better.
+
+tweak to recruiting:
+recruiting focus during season by the staff only figure in at the end of the season and is tied to team performance and expectations so that a player does not see the effect on that recruiting until the season is over and it factors into generating prestige to spend on recruiting at year's end. during the season, prestige won't really matter. We need a formula to determine prestige and we need to factor college playoffs into this as well. We do not need to do a full bowl list, just the playoffs and then we should figure out how to match up the best 3 minor college teams againt equivalent major teams, whether that is attribute score based or whatever.
+
+Weekly Focus should primarily change predictable systems, with events emerging around those consequences.
+I'd use randomness as seasoning, rather than making the allocation screen essentially modify seven sets of random-event probabilities.
+Some investments should have genuine tradeoffs.
+More intense practice might improve Execution and slightly increase practice injury exposure. More film gives better opponent knowledge but costs player-development time. More recruiting increases attention from recruits but could mean the coach is less available to players. More rest reduces burnout but means something football-related isn't getting done.
+
+coaching progression:
+I would avoid another traditional skill tree full of +3 bonuses.
+Instead I'd give the coach earned identity traits based largely on behavior:
+Developer. Players consistently outperform potential.
+Tactician. Strong record against superior rosters.
+Players' coach. Strong retention and former-player relationships.
+Staff builder. Assistants improve and receive promotions.
+Recruiter. Consistently lands classes above program prestige.
+Gambler. Aggressive fourth-down and high-variance tendencies.
+CEO. Delegates effectively and builds strong organizations.
+Those traits could influence reputation and the kinds of jobs that call without needing to become another screen full of numbers.
+
+I'd add a small postgame staff review.
+For example:
+“Offensive coordinator: his early read on their right corner proved accurate. His warning about inside pressure was wrong.”
+Or eventually simply:
+“Track record: usually dependable on receiver matchups; inconsistent evaluating offensive lines.”
+That lets personalities develop in the player's mind without exposing the hidden Evaluation number.
+
+after the prior play is reported, the next play starts with a call for formation, which at this point, a player can hit a button that represents "no huddle" so this takes care of tempo. The coordinator should probably suggest a formation for the next play without the user doing anything, it should start to read the suggested play and part of reading that play name, we hear "sub" if a substitution would happen due to formation change. A user could just hit enter to accept the play as suggested or go through the playbook and pick a different play. As part of reading the play, we should think about including a confidence meter by the coordinator or wording with his suggestion, and then an overall description of the play for those who are new and don't remember formations and what they are good against. Since we are tracking these kinds of numbers we should consider adding the ability to see how many times the play has been called and its success rate metrimetrics.
+
+
+Offense and defense should mirror each other's interface, but not necessarily their mechanics.
+Section 16.6 says defense mirrors offense exactly. 
+DESIGN
+I'd modify that wording.
+They should have the same interaction grammar so the player doesn't learn two interfaces.
+But football-wise they're fundamentally different. Offense initiates an action. Defense combines personnel, front, coverage, pressure and adjustment in response to what the offense presents.
+So reuse the controls, menus, suggestion system and practice concept, but allow the defensive engine to be its own system.
+One actual contradiction in the document
+Section 7.1 still says the Focus sliders are standard form controls. 
+DESIGN
+Section 21 correctly says football follows Accessible Golf's zero-standard-input rule and uses a custom Up/Down/Left/Right allocation list instead. 
+DESIGN
+
+I would also change one behavior in the newer version: when increasing a Focus category after all 100 points are allocated, don't silently steal five points from the lowest category as currently proposed. 
+DESIGN
+That is especially undesirable in an audio interface because the game changes something the player isn't currently looking at.
+Instead say:
+“Nothing unallocated. Lower another category first.”
+It is an extra keystroke, but the result is completely predictable.
+
+There should be a distinct halftime coaching phase.
+Not a large menu. Something like:
+“Three things your staff learned.”
+“Two things the opponent changed.”
+“Your biggest personnel problem.”
+Then allow perhaps one or two strategic changes.
+For example:
+“Keep attacking their corner.”
+“Shift attention to the tight end.”
+“Bring more pressure.”
+“Protect the quarterback.”
+“Stay with the original plan.”
+Halftime would become the natural midpoint of the counter system.
+
+
+One system I would rethink substantially: Legacy perks
+The loadout idea is definitely the better choice. 
+DESIGN
+But I would be careful with permanent raw-power perks such as +5 weekly Focus and “every athletic director gives you another season.”
+They create a strange difficulty curve:
+A brand-new player gets the hardest version of the game.
+An expert who has already mastered it gets increasingly powerful advantages.
+Some progression is desirable, but I would make most Legacy unlocks create options rather than power.
+Starting at higher levels is good.
+Unlocking unusual schools is good.
+Unlocking difficult coach backgrounds is good.
+Unlocking new staff archetypes is good.
+Unlocking historical career summaries, challenge runs and alternate starting conditions is good.
+If you retain raw advantages, the loadout should have a point cap. Perhaps the player owns twenty perks but can equip only three or spend only ten loadout points on a run.
+Then the meta-game becomes another choice rather than permanent easy mode.
+
+The MVP I would build
+I would resist implementing the entire career design first.
+The first genuinely useful prototype only needs:
+One high-school team, one opponent, one roster, one OC, one DC, a small playbook, one weekly Focus screen, scouting/film, one game, the hunch system, the counter system, stamina/injuries, and a postgame report.
+No recruiting.
+No NIL.
+No NFL.
+No legacy system.
+No job market.
+No remote AI.
+If that one game is fun—specifically, if I find myself thinking, “My OC says their corner is vulnerable, but I think they're about to roll the safety over there, so I'm going to hit the seam instead”—you have the heart of the entire product.
+Then everything else in this 700-line design gives that game meaning over a career.
+
+
+finally, let's address this first as this is the reason for the game:
+2. 
+The actual football resolution model is still the largest mechanical hole.
+The document says outcomes depend upon matchups, Execution, Scheme, and risk, but there isn't yet a definition of how a snap actually resolves. 
+DESIGN
+Before building the career systems, I would design a small playable football engine answering questions like:
+What determines whether pressure gets home? What determines completion versus breakup versus interception? What creates rushing yardage? What determines YAC? When do sacks, fumbles and penalties occur? How do blocking matchups interact with the intended target matchup? What makes one play a good counter to a particular coverage/front rather than simply having higher Execution?
+I don't think it needs hundreds of football attributes. Quite the opposite. But it needs a clear interaction model underneath plays.
+Something like:
+Situation + play concept + execution + relevant player matchups + defensive call + live state + randomness = result.
+Most importantly, different play concepts need genuine reasons to exist. Otherwise the sophisticated coaching layer eventually collapses into, “Find whichever matchup currently has the highest edge and attack it.”

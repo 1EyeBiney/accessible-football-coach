@@ -1,0 +1,7 @@
+# Real-world reference data. Development only, never shipped.
+dev_data/
+
+# Editor and OS noise
+.vscode/
+Thumbs.db
+desktop.ini
