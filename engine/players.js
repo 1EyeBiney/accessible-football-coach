@@ -90,7 +90,9 @@
         var p = { id: null, name: rng.pick(FIRST) + ' ' + rng.pick(LAST), pos: pos,
                   year: rng.pick(['FR', 'SO', 'JR', 'SR']), attr: {},
                   // live state, reset each game
-                  live: { stamina: 100, health: 'ok', hurtMods: null, conf: 0, out: false } };
+                  // benched: pulled by his coordinator to get his legs back
+                  // (DESIGN.md 18.3). Not an injury; he comes back.
+                  live: { stamina: 100, health: 'ok', hurtMods: null, conf: 0, out: false, benched: false } };
         var keys = COMMON.concat(POSITIONS[pos].attrs), i;
         for (i = 0; i < keys.length; i++) {
             p.attr[keys[i]] = Math.round(clamp(base + rng.normal(0, 7), 5, 99));
@@ -154,7 +156,7 @@
     function resetLive(roster) {
         var i;
         for (i = 0; i < roster.players.length; i++) {
-            roster.players[i].live = { stamina: 100, health: 'ok', hurtMods: null, conf: 0, out: false };
+            roster.players[i].live = { stamina: 100, health: 'ok', hurtMods: null, conf: 0, out: false, benched: false };
         }
         rebuildDepth(roster);
     }

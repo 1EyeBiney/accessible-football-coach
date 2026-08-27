@@ -19,6 +19,34 @@
 
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+    // ---------- tendencies ----------
+
+    // Down and distance buckets. A coordinator does not learn "they play cover
+    // three"; he learns "on third and long they play cover four", which is what
+    // makes reading them worth anything (DESIGN.md 8.3).
+    var COV_BUCKETS = ['short', 'med', 'long', 'goal'];
+
+    function covBucket(sit) {
+        if (sit.ytg <= 5) return 'goal';
+        if (sit.dist <= 3) return 'short';
+        if (sit.dist <= 7) return 'med';
+        return 'long';
+    }
+
+    // Every defensive staff has a call sheet it believes in. Some are heavily
+    // patterned and easy to read; some mix it up and give a coordinator little
+    // to work with.
+    function makeTendency(rng) {
+        var out = { strength: rng.uniform(0.35, 1.0) }, i, b;
+        var pool = { short: ['C1', 'C3', 'C0'], med: ['C3', 'C1', 'C2'],
+                     long: ['C4', 'C2', 'C2M', 'C3'], goal: ['C1', 'C0', 'C3'] };
+        for (i = 0; i < COV_BUCKETS.length; i++) {
+            b = COV_BUCKETS[i];
+            out[b] = rng.pick(pool[b]);
+        }
+        return out;
+    }
+
     // ---------- team construction ----------
 
     function makeTeam(deps, opts) {
@@ -27,21 +55,57 @@
         var playbook = PL.buildPlaybook();
         var i;
         for (i = 0; i < playbook.length; i++) playbook[i].exec = clamp(Math.round(opts.rng.normal(opts.execMean || 50, 10)), 20, 90);
-        return { name: opts.name, roster: roster, playbook: playbook,
+        var level = opts.level || 'HS';
+        return { name: opts.name, roster: roster, playbook: playbook, level: level,
                  // Coaching identity: run/pass lean, aggression, coverage preference
                  style: { runLean: opts.runLean !== undefined ? opts.runLean : 0.5, aggression: opts.aggression || 0.3,
-                          covPref: opts.covPref || null },
+                          covPref: opts.covPref || null,
+                          // What this defensive staff likes to call by down and
+                          // distance. This is the tendency the other side's
+                          // coordinator is trying to read (DESIGN.md 8.3, 16.5).
+                          covTendency: makeTendency(opts.rng) },
+                 // The people who read the field for this coach (DESIGN.md 5).
+                 staff: deps.staff.makeStaffGroup(opts.rng, level, opts.staffQuality || 0),
                  // What this staff has learned this game (reset each game)
-                 memory: null };
+                 live: null };
     }
 
-    function resetMemory(team) {
-        team.memory = {
-            seenCov: {}, seenPress: {},              // what the opponent's defense has shown
-            targets: {},                            // role -> {calls, success}  (defense's exploitation counter)
-            runs: { calls: 0, success: 0 },
-            lastPersonnel: null, lastDefPersonnel: null
+    // One belief store per staff member per game. The offensive coordinator
+    // watches our offense, the defensive coordinator watches the offense we
+    // face, and the spotter watches both sidelines (DESIGN.md 18.2, 26.7).
+    function resetBeliefs(team, deps, opts) {
+        opts = opts || {};
+        var S = deps.staff;
+        team.live = {
+            beliefs: {
+                OC: S.newBeliefs(team.staff.OC, 'O', { scouting: opts.ocScouting, scoutWeight: opts.scoutWeight }),
+                DC: S.newBeliefs(team.staff.DC, 'D', { scouting: opts.dcScouting, scoutWeight: opts.scoutWeight }),
+                SPOT: S.newBeliefs(team.staff.SPOT, 'D', {})
+            },
+            ocHunch: null,      // the live matchup hunch the coach is calling from
+            ocHunchAge: 0,
+            dcHunch: null,      // the live adjustment hunch
+            dcHunchAge: 0,
+            reports: [],        // cued and batched hunches waiting to be heard
+            lastPersonnel: null,
+            lastDefPersonnel: null,
+            // Running average yards by play type, used to judge whether a hunch
+            // was worth following (the harness reports on this).
+            expect: { pass: { n: 0, sum: 0 }, run: { n: 0, sum: 0 } }
         };
+    }
+
+    // What this team has been averaging on this kind of play, before the
+    // current snap. The fallbacks are roughly the engine's own averages.
+    function expected(team, type) {
+        var e = team.live.expect[type];
+        if (!e || e.n < 6) return type === 'pass' ? 6.5 : 4.4;
+        return e.sum / e.n;
+    }
+
+    function noteExpect(team, type, yards) {
+        var e = team.live.expect[type];
+        if (e) { e.n++; e.sum += yards; }
     }
 
     // ---------- lineups ----------
@@ -49,8 +113,11 @@
     function offenseLineup(team, formation, P, PL) {
         var d = team.roster.depth, byId = team.roster.byId;
         var lu = {}, i;
+        // A player who is out, or who the coordinator has pulled to get his
+        // legs back (DESIGN.md 18.3), is not available.
         function pick(pos, idx) {
-            var ids = d[pos].filter(function (id) { return !byId[id].live.out; });
+            var ids = d[pos].filter(function (id) { return !byId[id].live.out && !byId[id].live.benched; });
+            if (!ids.length) ids = d[pos].filter(function (id) { return !byId[id].live.out; });
             return byId[ids[idx]] || byId[ids[ids.length - 1]] || null;
         }
         lu.QB1 = pick('QB', 0); lu.RB1 = pick('RB', 0); lu.RB2 = pick('RB', 1);
@@ -68,7 +135,9 @@
     function defenseLineup(team, front, PL) {
         var f = PL.FRONTS[front], d = team.roster.depth, byId = team.roster.byId;
         function take(pos, n) {
-            return d[pos].filter(function (id) { return !byId[id].live.out; }).slice(0, n).map(function (id) { return byId[id]; });
+            var ids = d[pos].filter(function (id) { return !byId[id].live.out && !byId[id].live.benched; });
+            if (ids.length < n) ids = d[pos].filter(function (id) { return !byId[id].live.out; });
+            return ids.slice(0, n).map(function (id) { return byId[id]; });
         }
         return { DL: take('DL', f.dl), LB: take('LB', f.lb), DB: take('DB', f.db) };
     }
@@ -126,16 +195,25 @@
         return tags;
     }
 
-    function guessCoverage(mem) {
-        var best = 'C3', bv = -1, k;
-        for (k in mem.seenCov) if (mem.seenCov[k] > bv) { bv = mem.seenCov[k]; best = k; }
-        return best;
+    // A coverage read is also a read on the box: a shell that keeps two
+    // safeties deep is a shell that is short a man against the run, and one
+    // that rolls a safety down is not.
+    function boxGuess(cov) {
+        if (cov === 'C2' || cov === 'C4' || cov === 'C2M') return 'light';
+        if (cov === 'C0') return 'loaded';
+        return 'normal';
     }
 
+    // The offensive coach calls from what his coordinator believes, never from
+    // the defense's actual call and never from a true attribute (DESIGN.md
+    // 24.1). If the coordinator has not seen enough yet, likelyCoverage
+    // returns nothing and the coach calls blind, which is the point.
     function chooseOffense(game, team, sit, offIdx, deps) {
-        var rng = game.rng, PL = deps.plays, P = deps.players;
+        var rng = game.rng, PL = deps.plays, S = deps.staff;
         var tags = situationTags(sit, game, offIdx);
-        var expected = guessCoverage(team.memory);
+        var ocStore = team.live.beliefs.OC;
+        var expectedCov = S.likelyCoverage(ocStore, covBucket(sit));
+        var hunch = team.live.ocHunch;
         var trailing = game.score[offIdx] < game.score[1 - offIdx];
         var late = game.quarter >= 4 && game.clock <= 180;
         var lead = game.score[offIdx] - game.score[1 - offIdx];
@@ -151,9 +229,28 @@
             w = 1 + fit * 1.5;
             w *= (c.type === 'run' ? runLean : (1 - runLean)) * 2;
             w *= 0.5 + pl.exec / 100;
-            // the coach's read of what the defense has shown
-            var sm = (c.vsCov && c.vsCov[expected]) || 0;
-            w *= 1 + sm * 0.04;
+            // The coordinator's read of what the defense has been showing.
+            // Scheme scales how much of his own playbook knowledge he brings.
+            if (expectedCov) {
+                var sm = (c.vsCov && c.vsCov[expectedCov]) || 0;
+                if (c.type === 'run') sm = (c.vsBox && c.vsBox[boxGuess(expectedCov)]) || 0;
+                // The weight on the scheme read is deliberately moderate. Tuned
+                // higher the offense over-commits to one answer, becomes
+                // predictable, and a good coordinator ends up worse than an
+                // average one; this value was picked from that curve.
+                w *= Math.max(0.15, 1 + sm * 0.07 * (0.4 + team.staff.OC.attr.scheme * 0.008));
+            }
+            // The live matchup hunch: go at the man the coordinator likes, stay
+            // away from the one he does not (DESIGN.md 5.3).
+            if (hunch && hunch.kind === 'matchup') {
+                if (hunch.key.indexOf('pass:') === 0 && c.type === 'pass' && c.reads) {
+                    var ri = c.reads.indexOf(hunch.target);
+                    if (ri === 0) w *= hunch.positive ? 2.2 : 0.4;
+                    else if (ri === 1) w *= hunch.positive ? 1.5 : 0.6;
+                } else if (hunch.key.indexOf('run:') === 0 && c.type === 'run' && c.poa === hunch.target) {
+                    w *= hunch.positive ? 2.2 : 0.4;
+                }
+            }
             if (c.type === 'run' && sit.dist > 12) w *= 0.3;
             if (c.depth === 'deep' && sit.ytg < 25) w *= 0.2;
             items.push({ item: pl, w: Math.max(0.05, w) });
@@ -167,7 +264,6 @@
     function chooseDefense(game, team, sit, offTeam, personnel, defIdx, deps) {
         var rng = game.rng, PL = deps.plays;
         var tags = situationTags(sit, game, 1 - defIdx);
-        var mem = team.memory;
         // Front by personnel
         var front;
         if (sit.ytg <= 3 || (tags.indexOf('short') >= 0 && personnel !== '11')) front = rng.weighted([{ item: 'GOAL', w: 2 }, { item: 'OVER', w: 1 }]);
@@ -181,6 +277,10 @@
         if (personnel === '11') { cw.C2 += 0.8; cw.C4 += 0.8; }
         if (personnel === '22') { cw.C1 += 1; cw.C3 += 1; }
         if (team.style.covPref) cw[team.style.covPref] += 2;
+        // The staff's own tendency by down and distance. A patterned defense is
+        // strong until the other coordinator reads it.
+        var tend = team.style.covTendency;
+        if (tend) cw[tend[covBucket(sit)]] += 9 * tend.strength;
         var items = [], k;
         for (k in cw) items.push({ item: k, w: Math.max(0.05, cw[k]) });
         var coverage = rng.weighted(items);
@@ -193,12 +293,22 @@
         for (k in pw) items.push({ item: k, w: Math.max(0.05, pw[k]) });
         var pressure = rng.weighted(items);
         if (coverage === 'C0') pressure = rng.chance(0.6) ? 'R6' : 'R5';
-        // Adjustment: the counter loop in its first form (DESIGN.md 8.3)
+        // Adjustment: the counter loop (DESIGN.md 8.3), now driven entirely by
+        // what the defensive coordinator believes he has seen. A coordinator
+        // who has not worked it out yet makes no adjustment, so a weak staff
+        // simply never counters, which is the intended cost of a weak staff.
         var adjustment = 'NONE';
-        var t1 = mem.targets.WR1;
-        if (t1 && t1.calls >= 3 && t1.success / t1.calls > 0.55 && rng.chance(0.6)) adjustment = rng.chance(0.5) ? 'BRACKET' : 'HELP';
-        else if (mem.runs.calls >= 6 && mem.runs.success / mem.runs.calls > 0.55 && rng.chance(0.5)) adjustment = 'LOAD';
-        else if (rng.chance(0.08)) adjustment = rng.pick(['SPY', 'CONTAIN']);
+        var hunch = team.live.dcHunch;
+        if (hunch && hunch.kind === 'adjustment' && hunch.recommendation) {
+            // Scheme decides whether he actually gets the adjustment installed
+            // in time; Evaluation already decided whether he is right.
+            var pApply = clamp(0.45 + team.staff.DC.attr.scheme * 0.005, 0.4, 0.95);
+            if (hunch.confidence === 'sure') pApply += 0.15;
+            else if (hunch.confidence === 'guess') pApply -= 0.15;
+            if (rng.chance(clamp(pApply, 0.2, 0.97))) adjustment = hunch.recommendation;
+        } else if (rng.chance(0.06)) {
+            adjustment = rng.pick(['SPY', 'CONTAIN']);
+        }
         return { front: front, coverage: coverage, pressure: pressure, adjustment: adjustment };
     }
 
@@ -293,6 +403,13 @@
     function setPossession(game, idx, ball) {
         game.off = idx; game.ball = clamp(ball, 1, 99); game.down = 1; game.dist = Math.min(10, 100 - game.ball);
         game.drivePlays = 0;
+        // A unit taking the field is when recovered players are announced and
+        // go back with the first team (DESIGN.md 18.3).
+        var i, b;
+        for (i = 0; i < 2; i++) {
+            b = game.teams[i].live && game.teams[i].live.beliefs;
+            if (b && game.S) { game.S.changeOfPossession(b.OC); game.S.changeOfPossession(b.DC); }
+        }
     }
 
     function score(game, idx, pts, deps) {
@@ -315,6 +432,84 @@
         return 'punt';
     }
 
+    // ---------- the staff watching the game ----------
+
+    // Does this call attack the matchup the coordinator recommended? Returns
+    // the hunch when it does and null otherwise. Only positive hunches count.
+    function hunchFollowed(team, play, PL) {
+        var h = team.live.ocHunch;
+        if (!h || h.kind !== 'matchup' || !h.positive) return null;
+        var c = PL.CONCEPTS[play.concept];
+        if (!c) return null;
+        if (h.key.indexOf('pass:') === 0) {
+            if (c.type !== 'pass' || !c.reads) return null;
+            var idx = c.reads.indexOf(h.target);
+            return (idx === 0 || idx === 1) ? h : null;
+        }
+        if (h.key.indexOf('run:') === 0) {
+            return (c.type === 'run' && c.poa === h.target) ? h : null;
+        }
+        return null;
+    }
+
+    // One snap, seen by four sets of eyes on each sideline.
+    function observeSnap(game, offIdx, res, deps, onOff, onDef) {
+        var S = deps.staff, rng = game.rng;
+        var off = game.teams[offIdx], def = game.teams[1 - offIdx];
+        var ocStore = off.live.beliefs.OC, dcStore = def.live.beliefs.DC;
+        var sit = res.sit;
+
+        S.observe(ocStore, res, rng);
+        S.observe(dcStore, res, rng);
+        // The coordinators whose unit is off the field say little (DESIGN.md
+        // 19.2), but their clocks still run so their timers behave.
+        def.live.beliefs.OC.plays++;
+        off.live.beliefs.DC.plays++;
+
+        var ocOut = S.hunches(ocStore, sit, { active: true, plays: deps.plays, playbook: off.playbook,
+                                              ownRoster: off.roster, ownOnField: onOff, rng: rng });
+        var dcOut = S.hunches(dcStore, sit, { active: true, plays: deps.plays,
+                                              ownRoster: def.roster, ownOnField: onDef, rng: rng });
+        // Each spotter watches the other sideline for the coach's benefit.
+        var spOff = S.hunches(off.live.beliefs.SPOT, sit, { watch: onDef, rng: rng });
+        var spDef = S.hunches(def.live.beliefs.SPOT, sit, { watch: onOff, rng: rng });
+        // The trainer speaks with the play result when someone goes down.
+        var trOff = S.injuryHunches(off.staff.TRAINER, res.injuries.filter(function (x) { return onOff.indexOf(x.player) >= 0; }), []);
+        var trDef = S.injuryHunches(def.staff.TRAINER, res.injuries.filter(function (x) { return onDef.indexOf(x.player) >= 0; }), []);
+
+        applyHunches(off, ocOut.concat(spOff, trOff));
+        applyHunches(def, dcOut.concat(spDef, trDef));
+
+        // Hunches go stale. A read from three drives ago is not a read.
+        off.live.ocHunchAge++; if (off.live.ocHunchAge > 12) off.live.ocHunch = null;
+        def.live.dcHunchAge++; if (def.live.dcHunchAge > 12) def.live.dcHunch = null;
+    }
+
+    // The automatic coach's answers. A human coach answers these through the
+    // controller instead; the same hunches drive both.
+    function applyHunches(team, list) {
+        var i, h, p, store;
+        for (i = 0; i < list.length; i++) {
+            h = list[i];
+            if (h.kind === 'matchup') { team.live.ocHunch = h; team.live.ocHunchAge = 0; }
+            else if (h.kind === 'adjustment') { team.live.dcHunch = h; team.live.dcHunchAge = 0; }
+            else if (h.kind === 'substitution') {
+                // The automatic coach answers "yes, now" (DESIGN.md 18.3).
+                p = h.target;
+                if (p && !p.live.out) {
+                    p.live.benched = true;
+                    store = h.source === 'OC' ? team.live.beliefs.OC : team.live.beliefs.DC;
+                    store.pulled[p.id] = true;
+                }
+            } else if (h.kind === 'recovered') {
+                if (h.target) h.target.live.benched = false;
+            }
+            team.live.reports.push(h);
+        }
+        // The report queue is a between-play queue, not a season archive.
+        if (team.live.reports.length > 30) team.live.reports.splice(0, team.live.reports.length - 30);
+    }
+
     // ---------- one play from scrimmage ----------
 
     function runPlay(game, offIdx, deps, isTwoPoint) {
@@ -327,8 +522,11 @@
         var oc = game.hooks && game.hooks.offense ? game.hooks.offense(game, off, sit, offIdx) : null;
         if (!oc) oc = chooseOffense(game, off, sit, offIdx, deps);
         var play = oc.play, tempo = oc.tempo || 'huddle';
+        // Did this call attack what the coordinator recommended? The harness
+        // reports on how often that was worth doing (DESIGN.md 5.3).
+        var hunchTest = hunchFollowed(off, play, PL);
         var personnel = PL.FORMATIONS[play.formation].personnel;
-        var offSubbed = off.memory.lastPersonnel !== null && off.memory.lastPersonnel !== personnel;
+        var offSubbed = off.live.lastPersonnel !== null && off.live.lastPersonnel !== personnel;
 
         // Defensive call
         var dc = game.hooks && game.hooks.defense ? game.hooks.defense(game, def, sit, off, personnel, defIdx) : null;
@@ -336,11 +534,11 @@
         var defPersonnel = PL.FRONTS[dc.front].dl + '-' + PL.FRONTS[dc.front].lb + '-' + PL.FRONTS[dc.front].db;
         var misaligned = false, twelveMen = false;
         // Substitution rule (DESIGN.md 16.5): the defense subs freely on a huddle or an offensive sub.
-        if (tempo === 'nohuddle' && !offSubbed && def.memory.lastDefPersonnel && def.memory.lastDefPersonnel !== defPersonnel) {
+        if (tempo === 'nohuddle' && !offSubbed && def.live.lastDefPersonnel && def.live.lastDefPersonnel !== defPersonnel) {
             if (rng.chance(0.22)) twelveMen = true; else misaligned = true;
         }
-        off.memory.lastPersonnel = personnel;
-        def.memory.lastDefPersonnel = defPersonnel;
+        off.live.lastPersonnel = personnel;
+        def.live.lastDefPersonnel = defPersonnel;
 
         var lu = offenseLineup(off, play.formation, P, PL);
         var dl = defenseLineup(def, dc.front, PL);
@@ -359,8 +557,9 @@
         // Stats and memory
         var st = game.stats[offIdx], dst = game.stats[defIdx];
         var concept = PL.CONCEPTS[play.concept];
-        off.memory.seenCov[dc.coverage] = (off.memory.seenCov[dc.coverage] || 0) + 1;
-        off.memory.seenPress[dc.pressure] = (off.memory.seenPress[dc.pressure] || 0) + 1;
+        // Tendency tracking: the offense sees what the defense lined up in.
+        // This is an observation, not a peek at the call sheet.
+        deps.staff.noteCoverage(off.live.beliefs.OC, covBucket(sit), dc.coverage, rng);
 
         var needed = sit.down === 1 ? sit.dist * 0.4 : (sit.down === 2 ? sit.dist * 0.6 : sit.dist);
         var success = res.yards >= needed && res.outcome !== 'interception' && !res.fumbleLost;
@@ -377,22 +576,33 @@
                     if (res.drop) st.drops++;
                     st.depth[concept.depth].att++;
                     if (res.outcome === 'complete') st.depth[concept.depth].comp++;
-                    if (res.role) {
-                        var tr = def.memory.targets[res.role] || (def.memory.targets[res.role] = { calls: 0, success: 0 });
-                        tr.calls++; if (success) tr.success++;
-                    }
                     if (res.pressured) st.pressuredAtt++;
                 }
             } else if (res.type === 'run') {
                 st.rushAtt++; st.rushYds += res.yards;
                 st.box[res.boxWeight].att++;
                 st.box[res.boxWeight].yds += res.yards;
-                def.memory.runs.calls++; if (success) def.memory.runs.success++;
             }
             if (res.fumble) { st.fumbles++; if (res.fumbleLost) st.fumblesLost++; }
             st.yardsHist.push(res.yards);
         }
         if (res.penalty) { (res.penalty.on === 'O' ? st : dst).penalties++; }
+
+        // Hunch accuracy. Only positive hunches are judged, because only they
+        // are a recommendation; "look elsewhere" is not something a play can
+        // follow. The concept is recorded with the entry so the harness can
+        // score the snap against what that particular play normally gains
+        // rather than against the offense's average of everything, which would
+        // measure which plays the hunch steered towards instead of whether the
+        // coordinator was right.
+        if (res.type === 'pass' || res.type === 'run') {
+            game.hunchLog.push({ team: offIdx, concept: res.concept, yards: res.yards,
+                                 followed: !!hunchTest,
+                                 evaluation: off.staff.OC.attr.evaluation,
+                                 confidence: hunchTest ? hunchTest.confidence : null,
+                                 key: hunchTest ? hunchTest.key : null });
+            noteExpect(off, res.type, res.yards);
+        }
 
         // Stamina and injuries
         var onOff = onFieldList(lu), onDef = onFieldList(dl);
@@ -404,6 +614,11 @@
         rollInjuries(rng, P, involved, injuries);
         if (injuries.length) { P.rebuildDepth(off.roster); P.rebuildDepth(def.roster); st.injuries += injuries.filter(function (x) { return onOff.indexOf(x.player) >= 0; }).length; }
         res.injuries = injuries;
+
+        // Everyone watches the same snap and forms their own beliefs from the
+        // events on it (DESIGN.md 26.7). This is the only channel; nothing
+        // below reads a player's true attributes.
+        observeSnap(game, offIdx, res, deps, onOff, onDef);
 
         // Apply the result to the field
         var text = describe(res, PL, offIdx, game);
@@ -494,9 +709,11 @@
         var rng = new deps.Rng(seed);
         var game = { rng: rng, teams: [home, away], score: [0, 0], stats: [newStats(), newStats()], log: [],
                      quarter: 1, clock: RULES.HS.quarterSecs, off: 0, ball: 25, down: 1, dist: 10, timeouts: [3, 3],
-                     hooks: hooks || null, drivePlays: 0, ot: false };
+                     hooks: hooks || null, drivePlays: 0, ot: false,
+                     S: deps.staff, hunchLog: [] };
         deps.players.resetLive(home.roster); deps.players.resetLive(away.roster);
-        resetMemory(home); resetMemory(away);
+        resetBeliefs(home, deps, (hooks && hooks.homeScouting) || {});
+        resetBeliefs(away, deps, (hooks && hooks.awayScouting) || {});
         var receivedFirst = rng.chance(0.5) ? 0 : 1;
         kickoff(game, 1 - receivedFirst, deps);
         var guard = 0;
@@ -557,7 +774,11 @@
     }
 
     var api = { RULES: RULES, makeTeam: makeTeam, playGame: playGame, chooseOffense: chooseOffense, chooseDefense: chooseDefense,
-                offenseLineup: offenseLineup, defenseLineup: defenseLineup, runPlay: runPlay, describe: describe, spot: spot, scoreLine: scoreLine };
+                offenseLineup: offenseLineup, defenseLineup: defenseLineup, runPlay: runPlay, describe: describe, spot: spot, scoreLine: scoreLine,
+                resetBeliefs: resetBeliefs, observeSnap: observeSnap, applyHunches: applyHunches,
+                situationTags: situationTags, onFieldList: onFieldList, newStats: newStats,
+                fourthDownDecision: fourthDownDecision, setPossession: setPossession, step: step,
+                kickoff: kickoff, punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
     root.AF.game = api;

@@ -12,8 +12,9 @@ var Rng = require(path.join(eng, 'rng.js')).Rng;
 var P = require(path.join(eng, 'players.js'));
 var PL = require(path.join(eng, 'plays.js'));
 var R = require(path.join(eng, 'resolve.js'));
+var S = require(path.join(eng, 'staff.js'));
 var G = require(path.join(eng, 'game.js'));
-var deps = { Rng: Rng, players: P, plays: PL, resolve: R, game: G };
+var deps = { Rng: Rng, players: P, plays: PL, resolve: R, staff: S, game: G };
 
 var N = parseInt(process.argv[2], 10) || 400;
 var SEED = parseInt(process.argv[3], 10) || 5;

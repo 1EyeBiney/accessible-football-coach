@@ -145,7 +145,10 @@
         var qb = lu.QB1;
         var es = execScale(ctx.play.exec);
         var schemeMod = ((concept.vsCov[ctx.call.coverage] || 0) + (concept.vsPress[ctx.call.pressure] || 0)) * es * 1.8;
-        var res = { type: 'pass' };
+        // screen and depth are carried on the result because the staff belief
+        // model (engine/staff.js) files observations by what kind of play it
+        // was, and it may not read the concept tables.
+        var res = { type: 'pass', screen: !!concept.screen, depth: concept.depth };
 
         // Busted assignment: the play simply fails (DESIGN.md 26.6)
         if (rng.chance(clamp(0.10 - ctx.play.exec * 0.001, 0.015, 0.10))) {
@@ -205,24 +208,47 @@
             if (adj === 'HELP' && role === 'WR1' && depth !== 'short') help -= 9;
             if (adj === 'CONTAIN' && (concept.screen || concept.pa)) help -= 5;
             sep += help + rng.normal(0, 7);
-            reads.push({ role: role, rcv: rcv, dfd: dfd, sep: sep, help: help });
+            // edge is the part of the separation that is the receiver beating
+            // the man in front of him, with the scheme, the coverage shell and
+            // the help stripped out. Coordinators form beliefs from this rather
+            // than from raw separation, because a coach watching the tape can
+            // tell a man winning from a scheme creating space (DESIGN.md 5.3).
+            reads.push({ role: role, rcv: rcv, dfd: dfd, sep: sep, help: help, edge: rv - dv });
         }
         if (!reads.length) { res.outcome = 'throwaway'; res.yards = 0; res.clockRuns = false; return res; }
 
-        reads.sort(function (a, b) { return b.sep - a.sep; });
-        var choice = reads[0], bad = false;
+        // The quarterback works the progression the concept defines, in the
+        // order it defines it, and throws the first read that is open enough.
+        // He accepts less separation the deeper into the progression he goes,
+        // and every read he passes on costs him time. This is why the order of
+        // a concept's reads matters, and it is why a coordinator who knows
+        // which matchup is winning is worth listening to (DESIGN.md 26.3).
+        var openBar = 6 - (eff(qb, 'dec') - 45) * 0.06;
+        var choice = null, worked = 0, bestIdx = 0;
+        for (i = 0; i < reads.length; i++) {
+            if (reads[i].sep >= openBar - i * 5) { choice = reads[i]; worked = i; break; }
+        }
+        if (!choice) {
+            // Nothing came open. He comes back to the best of a bad set.
+            for (i = 1; i < reads.length; i++) if (reads[i].sep > reads[bestIdx].sep) bestIdx = i;
+            choice = reads[bestIdx];
+            worked = reads.length;
+        }
+        var bad = false;
         var pErr = clamp(0.20 - (eff(qb, 'dec') - 45) * 0.004 + (hurried ? 0.15 : 0) + (P.PRESSURES[ctx.call.pressure].disguise ? 0.06 : 0), 0.03, 0.6);
         if (rng.chance(pErr)) {
             var alt = rng.pick(reads);
             if (alt !== choice) { choice = alt; bad = true; }
         }
+        // Time spent getting off the first read shows up in the throw.
+        hurry += worked * 3;
         // Throwaway when nothing is open under pressure
         if (choice.sep < -18 && hurried && rng.chance(0.5)) {
             res.outcome = 'throwaway'; res.yards = 0; res.clockRuns = false;
             events.push({ kind: 'throwaway', say: 'threw it away' });
             return res;
         }
-        events.push({ kind: 'target', role: choice.role, rcv: choice.rcv, dfd: choice.dfd, sep: choice.sep, help: choice.help, bad: bad,
+        events.push({ kind: 'target', role: choice.role, rcv: choice.rcv, dfd: choice.dfd, sep: choice.sep, edge: choice.edge, help: choice.help, bad: bad,
                       say: choice.rcv.name + ' against ' + choice.dfd.name + (choice.help < 0 ? ' with help' : '') });
         res.target = choice.rcv; res.defender = choice.dfd; res.role = choice.role;
 
@@ -298,7 +324,9 @@
         var es = execScale(ctx.play.exec);
         var form = P.FORMATIONS[ctx.play.formation];
         var bw = P.boxWeight(ctx.call.front, ctx.call.coverage, adj, form.personnel);
-        var res = { type: 'run', box: bw.box, boxWeight: bw.weight };
+        // poa is carried on the result for the same reason screen is on a pass:
+        // the staff belief model files run observations by point of attack.
+        var res = { type: 'run', box: bw.box, boxWeight: bw.weight, poa: concept.poa };
         var carrier = concept.qbRun ? lu.QB1 : lu.RB1;
         res.carrier = carrier;
 
