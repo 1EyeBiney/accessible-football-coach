@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accessible Football</title>
+<style>
+    /* The visual side is a mirror for anyone watching. Every part of it is
+       aria-hidden, so the screen reader hears exactly one channel and never
+       double reads (DESIGN.md 21.3). */
+    body {
+        margin: 0;
+        background: #10161d;
+        color: #e8eef5;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 18px;
+        line-height: 1.6;
+    }
+    .sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+    }
+    #initBtn {
+        display: block;
+        margin: 25vh auto;
+        padding: 1.2rem 2.4rem;
+        font-size: 1.4rem;
+        font-family: inherit;
+        background: #1d78c8;
+        color: #fff;
+        border: 3px solid #cfe4f7;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    #initBtn:focus { outline: 4px solid #ffd166; outline-offset: 4px; }
+    #game-container { outline: none; padding: 2rem; max-width: 60rem; margin: 0 auto; }
+    #game-container:focus { outline: none; }
+    #mirror {
+        font-size: 1.5rem;
+        min-height: 6rem;
+        padding: 1.2rem;
+        border: 2px solid #2e4054;
+        border-radius: 8px;
+        background: #16202b;
+    }
+    #panel {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        white-space: pre-wrap;
+        color: #9fb4c8;
+        font-size: 1rem;
+        border-top: 1px solid #2e4054;
+    }
+    h1 { font-size: 1.2rem; color: #9fb4c8; font-weight: normal; margin: 0 0 1rem 0; }
+</style>
+</head>
+<body role="application">
+
+<!-- The one standard control in the game. Pressing it creates the audio
+     context, which browsers only allow inside a user gesture, hides itself,
+     shows the container and gives it focus. From that moment the screen reader
+     is in focus mode and every key goes to the game (DESIGN.md 21.1). -->
+<button id="initBtn" autofocus>Press Enter to Begin</button>
+
+<div id="game-container" tabindex="0" hidden
+     aria-label="Accessible Football. Press F1 for help, or F12 to hear what any key does without doing it.">
+
+    <!-- One voice. Nothing else in the page is ever read (DESIGN.md 21.3). -->
+    <div id="aria-announce" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+    <h1 aria-hidden="true">Accessible Football</h1>
+    <div id="mirror" aria-hidden="true"></div>
+    <div id="panel" aria-hidden="true"></div>
+</div>
+
+<!-- Load order matters: the engine first, then the interface, then main.
+     Plain script tags, no modules, because ES modules do not load from a file
+     URL and the game has to run by opening this file (DESIGN.md 25). -->
+<script src="engine/rng.js"></script>
+<script src="engine/players.js"></script>
+<script src="engine/plays.js"></script>
+<script src="engine/resolve.js"></script>
+<script src="engine/staff.js"></script>
+<script src="engine/game.js"></script>
+<script src="engine/controller.js"></script>
+<script src="ui/core.js"></script>
+<script src="ui/help_text.js"></script>
+<script src="ui/dom.js"></script>
+<script src="ui/screens.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

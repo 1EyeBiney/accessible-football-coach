@@ -83,6 +83,7 @@
             halftimeDone: false,
             over: false,
             lastReport: '',
+            verbosity: opts.verbosity || 'full',
             secondHalfPlan: null
         };
         c.game = deps.game.startGame(deps, opts.home, opts.away, opts.seed);
@@ -185,7 +186,10 @@
         var g = c.game;
         var us = g.teams[c.coach].name, them = g.teams[1 - c.coach].name;
         var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
-        var qtr = g.quarter <= 4 ? words(g.quarter) + ' quarter' : 'overtime';
+        // Only call it overtime when it actually is overtime. The quarter
+        // counter runs past four at the end of regulation whether the game is
+        // tied or not.
+        var qtr = g.ot ? 'overtime' : (words(Math.min(4, g.quarter)) + ' quarter');
         return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball) + '. ' +
                qtr + ', ' + clockWords(g.clock) + '. ' +
                us + ' ' + words(g.score[c.coach]) + ', ' + them + ' ' + words(g.score[1 - c.coach]) + '.';
@@ -497,7 +501,10 @@
         c.suggestCache = {};
 
         // 1. the play result
-        var line = g.log.length ? g.log[g.log.length - 1].text : '';
+        // Terse gives the coach one line a play; full adds the call and who
+        // beat whom (DESIGN.md 2). The interface sets which it wants.
+        var last = g.log.length ? g.log[g.log.length - 1] : null;
+        var line = last ? ((c.verbosity === 'terse' && last.terse) ? last.terse : last.text) : '';
         if (res && res.formation) { c.lastFormation = res.formation; c.lastOffFormation = res.formation; }
         if (line) { c.log.push(line); c.lastReport = line; say(c, line, 'result', null); }
 
@@ -505,12 +512,15 @@
         //    the result because the trainer speaks at once (DESIGN.md 18.4).
         collectReports(c);
 
-        // 4. the situation line, when a possession or a quarter changed
-        if (g.off !== before.off || g.quarter !== before.quarter) say(c, situationLine(c), 'result', null);
+        // 4. the situation line, when a possession or a quarter changed. Not
+        //    when the game has just ended: there is no next snap to set up.
+        if (!g.finished && (g.off !== before.off || g.quarter !== before.quarter)) {
+            say(c, situationLine(c), 'result', null);
+        }
 
         if (g.finished) {
             c.over = true;
-            say(c, 'Final. ' + deps.game.scoreLine(g), 'result', null);
+            say(c, 'Final. ' + deps.game.scoreLine(g) + '.', 'result', null);
             postgameReview(c).forEach(function (t) { say(c, t, 'batched', null); });
         }
         c.pending = nextPending(c);
@@ -642,6 +652,13 @@
         return drain(c);
     }
 
+    // full or terse (DESIGN.md 2). The interface owns the key; the controller
+    // owns which form of the play by play it hands back.
+    function setVerbosity(c, level) {
+        c.verbosity = level === 'terse' ? 'terse' : 'full';
+        return c.verbosity;
+    }
+
     function setReportThreshold(c, level) {
         c.reportThreshold = level;
         say(c, 'Reports: ' + level + '.', 'result', null);
@@ -663,7 +680,8 @@
                 reports: reports, batchedReports: batchedReports, chimes: chimes,
                 matchups: matchups, tendencies: tendencies, postgameReview: postgameReview,
                 playClockSeconds: playClockSeconds, delayOfGame: delayOfGame,
-                setMode: setMode, setReportThreshold: setReportThreshold, final: final,
+                setMode: setMode, setReportThreshold: setReportThreshold,
+                setVerbosity: setVerbosity, final: final,
                 words: words, clockWords: clockWords, spotWords: spotWords, staminaWord: staminaWord };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

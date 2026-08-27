@@ -651,7 +651,8 @@
         observeSnap(game, offIdx, res, deps, onOff, onDef);
 
         // Apply the result to the field
-        var text = describe(res, PL, offIdx, game);
+        var described = describeBoth(res, PL);
+        var text = described.full;
         var td = false, turnover = false, safety = false;
         if (isTwoPoint) {
             td = (res.outcome === 'complete' || res.outcome === 'run' || res.outcome === 'scramble') && res.yards >= 3 && !res.fumbleLost;
@@ -685,9 +686,14 @@
         if ((res.clockRuns && !res.oob && !td && !turnover && !res.penalty) || mercy) secs += (tempo === 'nohuddle' ? 12 : 26);
         if (res.kneel) secs = 40;
         var trailingLate = game.score[defIdx] < game.score[offIdx] && game.quarter >= 4 && game.clock <= 150;
-        if (res.clockRuns && trailingLate && game.timeouts[defIdx] > 0 && !td) { game.timeouts[defIdx]--; secs = 5; text += ', timeout ' + game.teams[defIdx].name; }
+        if (res.clockRuns && trailingLate && game.timeouts[defIdx] > 0 && !td) {
+            game.timeouts[defIdx]--; secs = 5;
+            text += ', timeout ' + game.teams[defIdx].name;
+            described.terse += ', timeout ' + game.teams[defIdx].name;
+        }
         game.clock = Math.max(0, game.clock - secs);
-        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'play', text: text, res: res });
+        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'play',
+                        text: text, terse: described.terse, res: res });
         game.drivePlays++;
 
         if (td) {
@@ -706,9 +712,28 @@
         return res;
     }
 
-    function describe(res, PL, offIdx, game) {
+    // Two forms of the same snap. The full one carries the call and the
+    // matchup events for a coach who wants the detail; the terse one is the
+    // single line DESIGN.md 2 asks for. The interface picks between them.
+    function describeBoth(res, PL) {
+        var full = describe(res, PL);
+        var head = downLine(res) + ': ';
+        var body = full.slice(head.length);
+        var callEnd = body.indexOf('. ');
+        var terseBody = callEnd >= 0 ? body.slice(callEnd + 2) : body;
+        var evStart = terseBody.lastIndexOf(' (');
+        if (evStart > 0 && /\)$/.test(terseBody)) terseBody = terseBody.slice(0, evStart);
+        return { full: full, terse: head + terseBody };
+    }
+
+    function downLine(res) {
+        return (res.sit.down === 1 ? '1st' : res.sit.down === 2 ? '2nd' : res.sit.down === 3 ? '3rd' : '4th') +
+               ' and ' + (res.sit.dist >= res.sit.ytg ? 'goal' : res.sit.dist) + ' at ' + spot(100 - res.sit.ytg);
+    }
+
+    function describe(res, PL) {
         var c = PL.CONCEPTS[res.concept], f = PL.FORMATIONS[res.formation];
-        var head = (res.sit.down === 1 ? '1st' : res.sit.down === 2 ? '2nd' : res.sit.down === 3 ? '3rd' : '4th') + ' and ' + (res.sit.dist >= res.sit.ytg ? 'goal' : res.sit.dist) + ' at ' + spot(100 - res.sit.ytg) + ': ';
+        var head = downLine(res) + ': ';
         var call = c.name + ' from ' + f.name + ' against ' + PL.COVERAGES[res.call.coverage].name + ', ' + PL.PRESSURES[res.call.pressure].say + (res.call.adjustment !== 'NONE' ? ', ' + PL.ADJUSTMENTS[res.call.adjustment].say : '') + '. ';
         var body;
         if (res.penalty && res.penalty.preSnap) body = 'Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards.';
@@ -849,6 +874,7 @@
                 offenseLineup: offenseLineup, defenseLineup: defenseLineup, runPlay: runPlay, describe: describe, spot: spot, scoreLine: scoreLine,
                 resetBeliefs: resetBeliefs, observeSnap: observeSnap, applyHunches: applyHunches,
                 situationTags: situationTags, onFieldList: onFieldList, newStats: newStats,
+                describeBoth: describeBoth,
                 fourthDownDecision: fourthDownDecision, setPossession: setPossession, step: step,
                 startGame: startGame, stepGame: stepGame, covBucket: covBucket,
                 kickoff: kickoff, punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
