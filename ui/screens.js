@@ -110,7 +110,7 @@
     function contextLine(app) {
         if (app.state.mode === 'game' && app.game) {
             var line = CTRL().situationLine(app.game);
-            if (app.step === 'offense-suggest' || app.step === 'defense-suggest') {
+            if (app.step === 'offense-suggest' || app.step === 'defense-suggest' || app.step === 'special-suggest') {
                 return line + ' ' + (app.suggested ? app.suggested.text : '') + ' Enter accepts.';
             }
             if (app.step === 'sub-answer') return line + ' Your coordinator is still waiting on a substitution.';
@@ -366,10 +366,17 @@
             return;
         }
         if (p.kind === 'auto') {
-            // A delegated side, or the special teams. The coach presses
-            // spacebar, or the pacing timer does it for him.
+            // A delegated side, the other team's snap, or a kneel-out. The
+            // coach presses spacebar, or the pacing timer does it for him.
             app.step = 'advance';
             if (app.state.pacing === 'manual') say(app, 'Press the spacebar to play on.', 'result');
+            return;
+        }
+        if (p.kind === 'special') {
+            var sc = C.specialTeamsChoices(app.game);
+            app.step = 'special-suggest';
+            app.suggested = sc;
+            say(app, sc.text + ' Enter accepts, or F for your other options.', 'result', 'ST');
             return;
         }
         var side = p.kind === 'offense' ? 'offense' : 'defense';
@@ -479,7 +486,7 @@
                     say(app, contextLine(app), 'result');
                     return { say: 'off' };
                 }
-                chatter(app, H().getKeyDescription(key.name, key.shift, key.ctrl, exploreMode(state)));
+                chatter(app, H().getKeyDescription(key.name, key.shift, key.ctrl, exploreMode(state), app.step));
                 return { say: 'described' };
             },
             help: function (state, key) {
@@ -562,6 +569,12 @@
         if (v.kind === 'subs') {
             doSubstitution(app, item);
             return { say: 'sub' };
+        }
+        if (v.kind === 'special') {
+            app.state.viewer = null;
+            tone(app, 'close');
+            afterSnap(app, CTRL().callSpecial(app.game, item.id));
+            return { say: 'special' };
         }
         if (v.kind === 'defpart') {
             app.state.viewer = null;
@@ -723,6 +736,7 @@
         }
         if (app.step === 'offense-suggest') return offenseKey(app, key);
         if (app.step === 'defense-suggest') return defenseKey(app, key);
+        if (app.step === 'special-suggest') return specialKey(app, key);
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
@@ -774,6 +788,28 @@
         if (key.name === 'u') { openSubList(app); return { say: 'subs' }; }
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
+    }
+
+    // Fourth down, or after a score: the same Enter-accepts, F-for-more
+    // grammar as offense and defense (DESIGN.md 8.4).
+    function specialKey(app, key) {
+        var C = CTRL();
+        if (key.name === 'Enter') {
+            afterSnap(app, C.callSpecial(app.game, app.suggested.recommendation.toUpperCase()));
+            return { say: 'called' };
+        }
+        if (key.name === 'f') { openSpecialList(app); return { say: 'special-list' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function openSpecialList(app) {
+        var choices = CTRL().specialTeamsChoices(app.game);
+        var menu = U().makeMenu(choices.options.map(function (o) { return { id: o.id, text: o.text }; }),
+                                'Your options. Escape goes back.');
+        app.state.viewer = { kind: 'special', menu: menu };
+        tone(app, 'open');
+        say(app, U().menuAnnounce(menu), 'result');
     }
 
     function openFormationList(app) {

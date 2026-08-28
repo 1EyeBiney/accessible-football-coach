@@ -27,7 +27,7 @@
 //                                         functions, module references, or
 //                                         always-empty between actions; the
 //                                         load side supplies fresh ones.
-//   controller.forcedOffense/forcedDefense
+//   controller.forcedOffense/forcedDefense/forcedSpecial
 //                                         only ever set for the duration of
 //                                         one advance() call and cleared at
 //                                         the end of it; never true state to
@@ -209,7 +209,7 @@
             secondHalfPlan: cc.secondHalfPlan, game: g, snapId: cc.snapId,
             suggestCache: cc.suggestCache, lastFormation: cc.lastFormation,
             lastOffFormation: cc.lastOffFormation, lastDefFront: cc.lastDefFront,
-            forcedOffense: null, forcedDefense: null
+            forcedOffense: null, forcedDefense: null, forcedSpecial: null
         };
         g.controller = c;
         return c;

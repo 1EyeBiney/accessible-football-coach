@@ -57,6 +57,10 @@ function playThrough(seed, opts) {
             var h = C.halftime(c);
             halftimes++;
             out = C.halftimeChoice(c, h.choices[0].id);
+        } else if (p.kind === 'special') {
+            var sp = C.specialTeamsChoices(c);
+            out = C.callSpecial(c, sp.recommendation.toUpperCase());
+            forced++;
         } else if (p.kind === 'auto') {
             out = C.advance(c);
         } else if (p.kind === 'over') {

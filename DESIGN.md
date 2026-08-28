@@ -266,6 +266,8 @@ Clock management is a real part of the game. Timeouts, spikes, kneels, and hurry
 
 Special teams are called by the special teams coordinator with the same suggestion-and-accept flow, and the coach can override.
 
+Status note, session 2 (August 27, 2026). Built without a fourth full coordinator; see DESIGN_PROPOSALS.md proposal 3 for the reasoning. The fourth-down flow (punt, field goal, go for it, or a fake) is a decision about the coach's own possession, so it is gated by offenseMode alone, the same three delegation levels as any other offensive call, with no dependence on defenseMode. The opponent's own fourth down and any kneel-out in victory formation are never a decision the coach is asked about, whatever the delegation setting. Onside kicks and a suggest-and-accept moment around the kickoff itself are not built.
+
 ## 9. Where the AI model fits (Decided)
 
 The AI language model never decides outcomes and never decides what the opponent does. Those are the engine's job so that the game is fair, testable, and works offline.

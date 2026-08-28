@@ -48,6 +48,7 @@ function driveOne(c) {
     else if (p.kind === 'defense') { var d = C.suggestion(c, 'defense'); C.callDefense(c, d.call); }
     else if (p.kind === 'substitution') { C.answerSubstitution(c, 'yes'); }
     else if (p.kind === 'halftime') { var h = C.halftime(c); C.halftimeChoice(c, h.choices[0].id); }
+    else if (p.kind === 'special') { var sp = C.specialTeamsChoices(c); C.callSpecial(c, sp.recommendation.toUpperCase()); }
     else if (p.kind === 'auto') { C.advance(c); }
     C.reports(c); // drain like the interface would, so nothing piles up
     return p.kind;

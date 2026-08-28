@@ -137,6 +137,7 @@
     //   { kind: 'substitution', hunch }      a must-answer report
     //   { kind: 'halftime' }
     //   { kind: 'offense' } / { kind: 'defense' }
+    //   { kind: 'special' }                  the coach's own fourth down
     //   { kind: 'auto' }                     a delegated side is calling
     //   { kind: 'over' }
     function nextPending(c) {
@@ -144,10 +145,17 @@
         var must = takeMust(c);
         if (must) return { kind: 'substitution', hunch: must };
         if (c.game.quarter === 3 && !c.halftimeDone) return { kind: 'halftime' };
-        // On fourth down the special teams coordinator has it unless the team
-        // is going for it. Asking the coach for a play here and then punting
-        // anyway would throw his call away (DESIGN.md 8.4).
-        if (specialTeamsComing(c)) return { kind: 'auto', reason: 'special teams' };
+        if (victoryFormationComing(c)) return { kind: 'auto', reason: 'victory formation' };
+        if (c.game.down === 4) {
+            // Not the coach's ball: the automatic coach's fourth-down call is
+            // never a decision he is asked about, the same as any other snap
+            // the other sideline runs (DESIGN.md 24.1).
+            if (c.game.off !== c.coach) return { kind: 'auto', reason: 'special teams' };
+            var stMode = c.offenseMode; // it is his possession either way
+            if (stMode === 'COORD') return { kind: 'auto', reason: 'special teams' };
+            if (stMode === 'KEY' && !worthStopping(c)) return { kind: 'auto', reason: 'special teams' };
+            return { kind: 'special' };
+        }
         var mine = offenseIsCoach(c);
         var mode = sideMode(c, mine);
         if (mode === 'COORD') return { kind: 'auto' };
@@ -155,18 +163,13 @@
         return { kind: mine ? 'offense' : 'defense' };
     }
 
-    // Is the next snap going to be a punt, a field goal, or a kneel rather
-    // than a called play?
-    function specialTeamsComing(c) {
+    // The same victory-formation test engine/game.js's step() uses, so the
+    // interface never asks a question a kneel is about to make moot.
+    function victoryFormationComing(c) {
         var g = c.game;
-        if (g.down !== 4) {
-            // Victory formation: the same test the engine uses.
-            var diff = g.score[g.off] - g.score[1 - g.off];
-            return !g.ot && g.quarter >= 4 && diff > 0 &&
-                   g.clock <= 40 * (5 - g.down) && g.timeouts[1 - g.off] === 0;
-        }
-        if (g.ot) return ((100 - g.ball) + 17 <= 40 && g.dist > 2);
-        return c.deps.game.fourthDownDecision(g, g.off) !== 'go';
+        var diff = g.score[g.off] - g.score[1 - g.off];
+        return !g.ot && g.quarter >= 4 && diff > 0 &&
+               g.clock <= 40 * (5 - g.down) && g.timeouts[1 - g.off] === 0;
     }
 
     function takeMust(c) {
@@ -359,6 +362,42 @@
         return advance(c);
     }
 
+    var ST_CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'your call, coach' };
+
+    // Punt, field goal, go for it, or a fake, with the same confidence
+    // wording an offensive or defensive suggestion carries (DESIGN.md 8.4).
+    // Deterministic, unlike suggestion(): fourthDownDecision draws from
+    // nothing, so there is no seed to protect by caching this.
+    function specialTeamsChoices(c) {
+        var g = c.game, GM = c.deps.game;
+        var ytg = 100 - g.ball, fgDist = ytg + 17;
+        var rec = g.ot ? GM.otFourthDownDecision(g, g.off) : GM.fourthDownDecision(g, g.off);
+        var conf = GM.fourthDownConfidence(g, g.off);
+        var opts = [{ id: 'GO', text: 'Go for it.' }];
+        // Overtime never punts (Decided, section 25); punting from inside
+        // the ten is not a real option either.
+        if (!g.ot && ytg > 10) opts.push({ id: 'PUNT', text: 'Punt.' });
+        if (fgDist <= 58) opts.push({ id: 'FG', text: words(fgDist) + ' yard field goal.' });
+        // A fake is only offered dressed as the kick it is faking, which is
+        // also what makes it a fake rather than a second way to go for it
+        // (DESIGN_PROPOSALS.md proposal 3).
+        if (rec === 'punt') opts.push({ id: 'FAKEPUNT', text: 'Fake the punt.' });
+        if (rec === 'fg') opts.push({ id: 'FAKEFG', text: 'Fake the field goal.' });
+        var recSay = rec === 'go' ? 'Go for it' : rec === 'fg' ? words(fgDist) + ' yard field goal' : 'Punt';
+        return { recommendation: rec, confidence: conf, options: opts,
+                 text: recSay + '. ' + (ST_CONF_SAY[conf] || '') + '.' };
+    }
+
+    var ST_ACTION = { GO: 'go', PUNT: 'punt', FG: 'fg', FAKEPUNT: 'go', FAKEFG: 'go' };
+    var ST_FAKE_SAY = { FAKEPUNT: 'Fake punt!', FAKEFG: 'Fake field goal!' };
+
+    function callSpecial(c, id) {
+        if (!ST_ACTION[id]) return fail(c, 'That is not one of the options.');
+        c.forcedSpecial = ST_ACTION[id];
+        if (ST_FAKE_SAY[id]) say(c, ST_FAKE_SAY[id], 'result', 'ST');
+        return advance(c);
+    }
+
     // yes | no | change | dead (DESIGN.md 18.3)
     function answerSubstitution(c, answer) {
         var h = takeMust(c);
@@ -493,11 +532,15 @@
             var fd = c.forcedDefense;
             hooks.defense = function () { return fd; };
         }
+        if (c.forcedSpecial) {
+            var fs = c.forcedSpecial;
+            hooks.special = function () { return fs; };
+        }
         g.hooks = hooks;
         c.lastOffFormation = null;
 
         var res = deps.game.stepGame(g, deps);
-        c.forcedOffense = null; c.forcedDefense = null; g.hooks = null;
+        c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null; g.hooks = null;
         c.snapId++;
         c.suggestCache = {};
 
@@ -676,6 +719,7 @@
                 situationLine: situationLine, examine: examine, suggestion: suggestion,
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
+                specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
                 answerSubstitution: answerSubstitution, advance: advance,
                 halftime: halftime, halftimeChoice: halftimeChoice,
                 reports: reports, batchedReports: batchedReports, chimes: chimes,

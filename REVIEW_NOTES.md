@@ -67,3 +67,19 @@ The auditor's highest-severity finding was that no interceptor layer blocks a re
 The save-to-disk anchor element in ui/dom.js (a hidden, tabindex -1 anchor created and clicked to trigger the browser download, then removed within a tick) is technically a second standard control beyond the one file picker CLAUDE.md and DESIGN.md 21.10 name explicitly. It predates this session, is never focused or seen by the coach, and there is no other way to start a file download from a static page with no server. Left as a defensible technical necessity rather than a violation of the rule's intent.
 
 A defensive fix (clearing state.confirm on a load) does not have a test exercising the specific race that motivates it, because that race needs an asynchronous file-picker callback and test/shell_test.js's fake dom resolves loadFromDisk synchronously. The fix is cheap and correct on inspection; giving the fake dom a way to defer its callback so this can be driven through a real test is left for later rather than done under this milestone.
+
+## Accessibility auditor, session 2, after the special teams flow
+
+Scoped to the fourth-down suggest-and-accept flow: engine/controller.js's nextPending, victoryFormationComing, specialTeamsChoices, and callSpecial, plus the new ui/screens.js and ui/help_text.js wiring. Four findings; two fixed, two logged as fine or as a documentation gap rather than code.
+
+### Fixed
+
+The F12 keyboard explorer described F on a fourth-down suggestion as "opens the formation list," which is what F does on an offensive suggestion, not what it does here (it opens the fourth-down options list). The explorer's getKeyDescription was mode-aware but not step-aware, and this feature made an existing ambiguity (F already meant something different on offense than on defense) into a three-way one with no way to tell them apart. It now takes an optional step argument and a STEP_KEYS table that is checked before the per-mode one, which also fixes the pre-existing defense case as a side effect: F12 then F now correctly names whichever list F is about to open, on all three kinds of suggestion.
+
+Real keys with no meaning on a fourth-down suggestion (N, D, U, all of which mean something on an offensive suggestion) fall all the way through specialKey unhandled, which is correct - what turns that into a spoken "N does nothing here" for a real coach is main.js's own unhandledLine(), a browser-only function test/shell_test.js's driver never exercises because it calls AF.screens.handleKey directly. Nothing was broken, but the "silence is a bug" guarantee for this specific step rested on untested code. A check was added confirming handleKey returns {swallowed:false, say:null} for such a key, which is the exact contract unhandledLine needs to do its job.
+
+### Checked and left
+
+Whether special teams delegation should be gated by offenseMode alone, with no dependence on defenseMode, was previously decided only in code and argued in DESIGN_PROPOSALS.md, not written into DESIGN.md 8.4 itself. Added as a status note to 8.4, a fact rather than a decision change, so the actual rule is no longer only inferable from a proposals document.
+
+Whether full verbosity should add anything to the fourth-down suggestion the way it adds a play's description on offense was flagged as worth a one-line confirmation from Brian rather than a bug: there is no equivalent detail to add (a punt, a kick, or going for it does not have a scheme description the way a play concept does), so the two verbosity levels being identical here looks correct rather than missing something.

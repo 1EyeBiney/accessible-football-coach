@@ -506,6 +506,22 @@
         return 'punt';
     }
 
+    // How one-sided the math behind fourthDownDecision is, in the same three
+    // words a coordinator's confidence already comes in (DESIGN.md 8.4,
+    // 5.3). Kept separate from fourthDownDecision itself so the automatic
+    // coach's own call in step() is untouched by this.
+    function fourthDownConfidence(game, offIdx) {
+        var ytg = 100 - game.ball, dist = game.dist, diff = game.score[offIdx] - game.score[1 - offIdx];
+        var late = game.quarter >= 4 && game.clock <= 300;
+        var desperate = late && diff < 0 && (game.clock <= 120 || diff < -8);
+        if (desperate) return 'sure';               // the clock is the only argument left
+        if (dist <= 1) return 'sure';                // a yard or less is rarely a real argument
+        if (ytg <= 15) return 'sure';                // a short field goal, or already fourth and short in the red zone
+        if (ytg <= 33 && dist > 7) return 'sure';    // plainly out of both range and reach: punt
+        if (dist <= 4 && game.ball >= 40) return 'likely'; // the analytics zone, but a real argument either way
+        return 'guess';
+    }
+
     // ---------- the staff watching the game ----------
 
     // Does this call attack the matchup the coordinator recommended? Returns
@@ -948,11 +964,26 @@
             return null;
         }
         if (game.down === 4) {
-            var d = ot ? ((100 - game.ball) + 17 <= 40 && game.dist > 2 ? 'fg' : 'go') : fourthDownDecision(game, offIdx);
+            // The coach's own fourth-down call, when he has one, takes
+            // precedence over the automatic recommendation (DESIGN.md 8.4).
+            // 'fakepunt' and 'fakefg' both resolve as a real snap, the same
+            // as 'go': a fake is a real conversion attempt with a kick
+            // formation's dressing on it, not a separate probability model
+            // (see DESIGN_PROPOSALS.md proposal 3).
+            var d = game.hooks && game.hooks.special ? game.hooks.special(game, offIdx)
+                    : (ot ? otFourthDownDecision(game, offIdx) : fourthDownDecision(game, offIdx));
             if (d === 'punt') { punt(game, offIdx, deps); return null; }
             if (d === 'fg') { fieldGoal(game, offIdx, deps); return null; }
         }
         return runPlay(game, offIdx, deps, false);
+    }
+
+    // Overtime never punts (Decided, section 25): a team either kicks or
+    // goes for it. In range means the kicker could plausibly make it, the
+    // same forty-yard field goal threshold engine/controller.js uses to
+    // decide whether the special teams choice offers a kick at all.
+    function otFourthDownDecision(game, offIdx) {
+        return (100 - game.ball) + 17 <= 40 && game.dist > 2 ? 'fg' : 'go';
     }
 
     var api = { RULES: RULES, makeTeam: makeTeam, playGame: playGame, chooseOffense: chooseOffense, chooseDefense: chooseDefense,
@@ -960,7 +991,8 @@
                 resetBeliefs: resetBeliefs, observeSnap: observeSnap, applyHunches: applyHunches,
                 situationTags: situationTags, onFieldList: onFieldList, newStats: newStats,
                 describeBoth: describeBoth,
-                fourthDownDecision: fourthDownDecision, setPossession: setPossession, step: step,
+                fourthDownDecision: fourthDownDecision, fourthDownConfidence: fourthDownConfidence,
+                otFourthDownDecision: otFourthDownDecision, setPossession: setPossession, step: step,
                 startGame: startGame, stepGame: stepGame, covBucket: covBucket,
                 kickoff: kickoff, punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

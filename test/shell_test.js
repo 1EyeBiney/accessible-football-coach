@@ -448,4 +448,78 @@ module.exports = function (t) {
     var finalSaid = d15.since(n);
     t.ok(finalSaid.toLowerCase().indexOf('final') >= 0, 'loading a finished game announces it as a final');
     t.ok(!/\d+(st|nd|rd|th) down/.test(finalSaid), 'loading a finished game does not read out a stale down and distance');
+
+    // ---------- F opens the fourth down options, same grammar as offense and defense ----------
+    var d16 = driver(AF);
+    AF.screens.boot(d16.app);
+    d16.key('Enter').key('Enter').key('Enter');
+    var g10 = 0;
+    while (d16.app.step !== 'special-suggest' && d16.app.state.mode !== 'final' && g10++ < 6000) {
+        if (d16.app.state.viewer) { d16.key('Escape'); continue; }
+        if (d16.app.step === 'sub-answer') { d16.key('n'); continue; }
+        if (d16.app.state.mode === 'halftime') { d16.key('Enter'); continue; }
+        d16.key('Enter');
+    }
+    if (d16.app.step === 'special-suggest') {
+        t.eq(d16.app.game.game.down, 4, 'the special-teams step really is the coach\'s own fourth down');
+        n = d16.count();
+        d16.key('f');
+        t.ok(d16.app.state.viewer !== null, 'F opens a list of options on fourth down');
+        t.ok(d16.since(n).length > 0, 'opening the list says something rather than going quiet');
+        var opts = d16.app.state.viewer.menu.items;
+        t.ok(opts.length >= 2, 'the fourth down list has more than one choice on it');
+        d16.key('ArrowDown');   // move off the first item deliberately
+        n = d16.count();
+        d16.key('Enter');
+        t.eq(d16.app.state.viewer, null, 'choosing from the fourth down list closes it');
+        t.ok(d16.app.state.mode === 'game' || d16.app.state.mode === 'final', 'choosing from the list moves the game on');
+    } else {
+        t.ok(false, 'a full game never reached a fourth down the coach faced, which should not happen inside six thousand snaps');
+    }
+
+    // ---------- a key with no meaning on fourth down is reported, not silently swallowed ----------
+    // Found by the accessibility auditor: a key like D, which means
+    // something on offense, reaches specialKey on a fourth down and is not
+    // handled there. main.js's own unhandledLine() is what turns that into
+    // a real "does nothing here" for a live coach; this checks the contract
+    // handleKey owes it, since main.js itself is never loaded by this driver.
+    var d17 = driver(AF);
+    AF.screens.boot(d17.app);
+    d17.key('Enter').key('Enter').key('Enter');
+    var g11 = 0;
+    while (d17.app.step !== 'special-suggest' && d17.app.state.mode !== 'final' && g11++ < 6000) {
+        if (d17.app.state.viewer) { d17.key('Escape'); continue; }
+        if (d17.app.step === 'sub-answer') { d17.key('n'); continue; }
+        if (d17.app.state.mode === 'halftime') { d17.key('Enter'); continue; }
+        d17.key('Enter');
+    }
+    if (d17.app.step === 'special-suggest') {
+        var raw = AF.screens.handleKey(d17.app, { name: 'd', shift: false, ctrl: false, alt: false });
+        t.eq(raw.swallowed, false, 'a key with no meaning on fourth down is not swallowed, so main.js\'s own fallback can report it');
+        t.eq(raw.say, null, 'specialKey itself says nothing for a key it does not recognise, leaving the announcement to that fallback');
+    }
+
+    // ---------- F12 describes F correctly for the step the coach is actually in ----------
+    // Also found by the auditor: the explorer was mode-aware but not
+    // step-aware, so F on a fourth-down suggestion described the offensive
+    // formation list, which is not what it does there.
+    var d18 = driver(AF);
+    AF.screens.boot(d18.app);
+    d18.key('Enter').key('Enter').key('Enter');
+    var g12 = 0;
+    while (d18.app.step !== 'special-suggest' && d18.app.state.mode !== 'final' && g12++ < 6000) {
+        if (d18.app.state.viewer) { d18.key('Escape'); continue; }
+        if (d18.app.step === 'sub-answer') { d18.key('n'); continue; }
+        if (d18.app.state.mode === 'halftime') { d18.key('Enter'); continue; }
+        d18.key('Enter');
+    }
+    if (d18.app.step === 'special-suggest') {
+        d18.key('F12');
+        n = d18.count();
+        d18.key('f');
+        var described = d18.since(n).toLowerCase();
+        t.ok(described.indexOf('fourth down') >= 0 || described.indexOf('options') >= 0,
+             'F12 then F on a fourth down describes the fourth down options list, not the formation list');
+        t.ok(described.indexOf('formation list') < 0, 'F12 then F on a fourth down does not describe the offensive formation list');
+    }
 };

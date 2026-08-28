@@ -50,6 +50,9 @@
         h('Calling a defense'),
         l('The same keys work on defense. Your coordinator suggests a front, a coverage, a pressure and an adjustment, and Enter accepts all four.'),
         l('F opens the front list if you want to build the call yourself. You go front, then coverage, then pressure, then adjustment.'),
+        h('Fourth down'),
+        l('On your own fourth down you hear a recommendation, punt or field goal or go for it, the same suggest and accept flow as any other play. Enter takes it.'),
+        l('F opens your other options: the other kicking or going choices for this down, plus a fake of whichever kick is recommended, if one is on the table. A fake is a real play with real risk dressed up as a kick, not a safer version of going for it.'),
         h('Listening to your staff'),
         l('When somebody has something for you, you hear a short sound rather than a speech. There are three sounds: one for your offensive coordinator, one for your defensive coordinator, and one for the spotter.'),
         l('Spacebar plays whatever report is waiting.'),
@@ -177,12 +180,36 @@
     };
 
     // code is the key name, for example ArrowUp or the letter itself.
-    function getKeyDescription(code, shift, ctrl, mode) {
+    // Some keys mean something different depending on which decision the
+    // coach is in the middle of, not just which screen he is on: F opens a
+    // formation list on an offensive suggestion, a front list on a
+    // defensive one, and a fourth-down options list on a special-teams one.
+    // Checked before MODE_KEYS, so the step's own wording wins over the
+    // generic per-screen one the explorer would otherwise give.
+    var STEP_KEYS = {
+        'offense-suggest': {
+            f: 'Formation. Opens the formation list so you can call your own play.',
+            n: 'No huddle. Same personnel, quick snap, no clean substitution for the defense.',
+            d: 'Detail. How often this play has been called and how often it has worked.'
+        },
+        'defense-suggest': {
+            f: 'Front. Opens the front list if you want to build the call yourself: front, then coverage, then pressure, then adjustment.'
+        },
+        'special-suggest': {
+            f: 'Options. Opens your other choices for this fourth down: punt, field goal, going for it, and a fake if one is on the table.'
+        }
+    };
+
+    // step is optional; a caller with no notion of a step (or a step this
+    // table does not know about) falls back to the plain per-mode table.
+    function getKeyDescription(code, shift, ctrl, mode, step) {
         var key = String(code);
         var lower = key.length === 1 ? key.toLowerCase() : key;
         if (ctrl && lower === 'Enter') return 'Control and Enter. Jumps to the last real choice and takes it.';
         if (shift && lower === 'h') return 'Shift H. Moves to the previous heading.';
         if (shift && lower === 'g') return 'Shift G. Opens your file picker to load a saved game.';
+        var stepTable = STEP_KEYS[step];
+        if (stepTable && stepTable[lower]) return (shift ? 'Shift ' : '') + describeName(lower) + '. ' + stepTable[lower];
         var modeTable = MODE_KEYS[mode];
         if (modeTable && modeTable[lower]) return (shift ? 'Shift ' : '') + describeName(lower) + '. ' + modeTable[lower];
         if (COMMON_KEYS[lower]) return describeName(lower) + '. ' + COMMON_KEYS[lower];
@@ -210,7 +237,7 @@
 
     var api = { helpFor: helpFor, HELP_BY_MODE: HELP_BY_MODE,
                 getKeyDescription: getKeyDescription, documentedKeys: documentedKeys,
-                COMMON_KEYS: COMMON_KEYS, MODE_KEYS: MODE_KEYS, describeName: describeName };
+                COMMON_KEYS: COMMON_KEYS, MODE_KEYS: MODE_KEYS, STEP_KEYS: STEP_KEYS, describeName: describeName };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
     root.AF.help = api;
