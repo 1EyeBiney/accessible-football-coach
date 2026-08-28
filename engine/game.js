@@ -264,8 +264,12 @@
         var trailing = game.score[offIdx] < game.score[1 - offIdx];
         var late = game.quarter >= 4 && game.clock <= 180;
         var lead = game.score[offIdx] - game.score[1 - offIdx];
-        var leadingBig = (lead >= 14 && game.quarter >= 4) || (lead >= 21 && game.quarter >= 3);
-        var runLean = team.style.runLean + (leadingBig ? 0.25 : 0) - (late && trailing ? 0.35 : 0) + (tags.indexOf('long') >= 0 ? -0.2 : 0) + (tags.indexOf('short') >= 0 ? 0.2 : 0);
+        // A team comfortably ahead starts protecting the lead earlier and at
+        // a lower bar than it used to (ISSUES.md): fourteen in the fourth
+        // quarter was leaving a big lead free to keep expanding through the
+        // third quarter and most of the fourth.
+        var leadingBig = (lead >= 10 && game.quarter >= 4) || (lead >= 17 && game.quarter >= 3) || (lead >= 24 && game.quarter >= 2);
+        var runLean = team.style.runLean + (leadingBig ? 0.3 : 0) - (late && trailing ? 0.35 : 0) + (tags.indexOf('long') >= 0 ? -0.2 : 0) + (tags.indexOf('short') >= 0 ? 0.2 : 0);
         var items = [], i, pl, c, w;
         for (i = 0; i < team.playbook.length; i++) {
             pl = team.playbook[i]; c = PL.CONCEPTS[pl.concept];
@@ -317,12 +321,18 @@
         else if (personnel === '11') front = rng.weighted([{ item: 'NICKEL', w: 6 }, { item: 'OVER', w: 2 }, { item: 'DIME', w: tags.indexOf('long') >= 0 ? 2 : 0.2 }]);
         else if (personnel === '21') front = rng.weighted([{ item: 'OVER', w: 4 }, { item: 'UNDER', w: 3 }, { item: 'THREE4', w: 2 }]);
         else front = rng.weighted([{ item: 'GOAL', w: 2 }, { item: 'UNDER', w: 3 }, { item: 'THREE4', w: 2 }]);
-        // Coverage by situation and preference
-        var cw = { C0: 0.4, C1: 2, C2: 1.5, C3: 3.5, C4: 2, C2M: 0.8 };
-        if (tags.indexOf('long') >= 0) { cw.C2 += 1.5; cw.C4 += 2; cw.C2M += 0.8; cw.C3 -= 1; }
-        if (tags.indexOf('short') >= 0 || tags.indexOf('goal') >= 0) { cw.C1 += 2; cw.C0 += 1; cw.C3 += 0.5; cw.C4 -= 1; }
+        // Coverage by situation and preference. Cover three ruling (Decided,
+        // DESIGN.md 26.2): it is a run-down and heavy-personnel call, not a
+        // default, so its base weight comes down and it earns its way back
+        // up on first down, short yardage, and heavier personnel groups,
+        // while two-high shells become the clear answer on a passing down.
+        var cw = { C0: 0.4, C1: 2, C2: 1.5, C3: 2, C4: 2, C2M: 0.8 };
+        if (tags.indexOf('1st') >= 0) cw.C3 += 1;
+        if (tags.indexOf('long') >= 0) { cw.C2 += 2; cw.C4 += 2.5; cw.C2M += 0.8; cw.C3 -= 1.5; }
+        if (tags.indexOf('short') >= 0 || tags.indexOf('goal') >= 0) { cw.C1 += 2; cw.C0 += 1; cw.C3 += 2; cw.C4 -= 1; }
         if (personnel === '11') { cw.C2 += 0.8; cw.C4 += 0.8; }
-        if (personnel === '22') { cw.C1 += 1; cw.C3 += 1; }
+        if (personnel === '21') { cw.C3 += 1; }
+        if (personnel === '22') { cw.C1 += 1; cw.C3 += 1.5; }
         if (team.style.covPref) cw[team.style.covPref] += 2;
         // The staff's own tendency by down and distance. A patterned defense is
         // strong until the other coordinator reads it.
@@ -495,13 +505,22 @@
         var ytg = 100 - game.ball, dist = game.dist, diff = game.score[offIdx] - game.score[1 - offIdx];
         var late = game.quarter >= 4 && game.clock <= 300;
         var desperate = late && diff < 0 && (game.clock <= 120 || diff < -8);
+        // A team already down by more than a score has no business gambling
+        // on fourth and short deep in its own territory before it is
+        // genuinely desperate: a stop there hands the other side a short
+        // field and turns a bad game into a rout, for the sake of staying on
+        // the field a little longer well before it matters (ISSUES.md).
+        // Left alone once the team actually is desperate, and left alone for
+        // a leading or tied team, or a trailing team already past its own
+        // fifty.
+        var troubleEarly = !desperate && diff < -8 && game.ball < 50;
         if (desperate && ytg > 35) return 'go';
         if (ytg <= 27 && dist > 3) return 'fg';
         if (ytg <= 27 && dist <= 3 && (ytg <= 8 || game.teams[offIdx].style.aggression > 0.4)) return 'go';
         if (ytg <= 27) return 'fg';
         if (ytg <= 33 && dist > 4 && !desperate) return 'punt';
-        if (dist <= 2 && game.ball >= 45) return 'go';
-        if (dist <= 1 && game.ball >= 35) return 'go';
+        if (!troubleEarly && dist <= 2 && game.ball >= 45) return 'go';
+        if (!troubleEarly && dist <= 1 && game.ball >= 35) return 'go';
         if (desperate) return 'go';
         return 'punt';
     }

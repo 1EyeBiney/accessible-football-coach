@@ -38,6 +38,7 @@ function clockText(secs) { var m = Math.floor(secs / 60), s = secs % 60; return 
 var master = new deps.Rng(SEED);
 var totals = null, games = 0, teamGames = 0, wins = [0, 0], ties = 0, margins = [], pointsList = [];
 var hunchLog = [], conceptYds = {}, conceptN = {};
+var covYds = {}, covN = {}, passSnaps = 0; // per-coverage yards and call rate, DESIGN.md 26.2
 var ocPoints = { poor: { n: 0, pts: 0 }, average: { n: 0, pts: 0 }, good: { n: 0, pts: 0 } };
 var beliefAcc = { poor: { n: 0, hit: 0, miss: 0 }, average: { n: 0, hit: 0, miss: 0 }, good: { n: 0, hit: 0, miss: 0 } };
 var yardsHist = {};
@@ -57,7 +58,10 @@ function addStats(t, s) {
 
 for (g = 0; g < GAMES; g++) {
     var rng = master.child(g);
-    var qa = EVEN ? 0 : rng.uniform(-0.6, 0.6), qb = EVEN ? 0 : rng.uniform(-0.6, 0.6);
+    // -0.35..0.35 approximates the spread of a real ten-team high school
+    // league rather than the -0.6..0.6 a full point wider than that, which
+    // was turning a modest roster gap into a rout too often (ISSUES.md).
+    var qa = EVEN ? 0 : rng.uniform(-0.35, 0.35), qb = EVEN ? 0 : rng.uniform(-0.35, 0.35);
     var home = deps.game.makeTeam(deps, { name: 'Home', stub: 'H', rng: rng, level: 'HS', quality: qa, runLean: rng.uniform(0.4, 0.65), aggression: rng.uniform(0.1, 0.5), execMean: 50,
         staffQuality: rng.uniform(-1.4, 1.4) });
     var away = deps.game.makeTeam(deps, { name: 'Away', stub: 'A', rng: rng, level: 'HS', quality: qb, runLean: rng.uniform(0.4, 0.65), aggression: rng.uniform(0.1, 0.5), execMean: 50,
@@ -86,7 +90,14 @@ for (g = 0; g < GAMES; g++) {
     var truth = [{}, {}], lj, le2, ej;
     for (lj = 0; lj < game.log.length; lj++) {
         le2 = game.log[lj];
-        if (le2.kind !== 'play' || !le2.res || !le2.res.events) continue;
+        if (le2.kind !== 'play' || !le2.res) continue;
+        if (le2.res.type === 'pass' && le2.res.call && !le2.res.nullified) {
+            var cvId = le2.res.call.coverage;
+            passSnaps++;
+            covN[cvId] = (covN[cvId] || 0) + 1;
+            covYds[cvId] = (covYds[cvId] || 0) + le2.res.yards;
+        }
+        if (!le2.res.events) continue;
         for (ej = 0; ej < le2.res.events.length; ej++) {
             var evt = le2.res.events[ej];
             if (evt.kind !== 'target' || evt.edge === undefined) continue;
@@ -154,6 +165,9 @@ console.log('  interceptions ' + pct(t.int, t.passAtt) + ' of attempts, drops ' 
 console.log('  sacks ' + pct(t.sacks, t.passAtt + t.sacks) + ' of dropbacks, ' + per(t.sacks, teamGames) + ' per game');
 var d;
 for (d in t.depth) console.log('  ' + d + ': ' + t.depth[d].att + ' attempts, completion ' + pct(t.depth[d].comp, t.depth[d].att));
+console.log('  coverage called (yards per snap, share of pass snaps): ' + Object.keys(covN).sort().map(function (k) {
+    return k + ' ' + per(covYds[k], covN[k]) + ' (' + pct(covN[k], passSnaps) + ')';
+}).join(', '));
 console.log('');
 console.log('Rushing:');
 console.log('  yards per carry ' + per(t.rushYds, t.rushAtt, 2) + ', fumbles ' + per(t.fumbles, teamGames, 2) + ' per game, lost ' + per(t.fumblesLost, teamGames, 2));
@@ -201,7 +215,9 @@ for (ci = 0; ci < byConf.length; ci++) {
     if (cs.length) console.log('  said as a ' + byConf[ci] + ': ' + cs.length + ' followed, right ' + pct(cs.filter(scored).length, cs.length));
 }
 console.log('');
+var blowouts = margins.filter(function (m) { return m > 35; }).length;
 console.log('Games: home wins ' + wins[0] + ', away wins ' + wins[1] + ', ties ' + ties + '. Average margin ' + per(margins.reduce(function (a, b) { return a + b; }, 0), games) + '.');
+console.log('Decided by more than 35: ' + blowouts + ' of ' + games + ' (' + pct(blowouts, games) + '). Target about one in eight of mixed-quality games, one in twenty-five between equal teams.');
 pointsList.sort(function (a, b) { return a - b; });
 console.log('Team points: low ' + pointsList[0] + ', median ' + pointsList[Math.floor(pointsList.length / 2)] + ', high ' + pointsList[pointsList.length - 1] + '.');
 console.log('');

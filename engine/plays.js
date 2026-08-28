@@ -75,7 +75,10 @@
         CURLFLAT: { name: 'Curl and Flat', type: 'pass', depth: 'int', ttt: 2.4, risk: 0.9, yac: 0.3, complexity: 1,
                  forms: ['SPREAD', 'TRIPS', 'IFORM', 'HEAVY'], reads: ['WR1', 'RB1', 'WR2'], tags: ['2nd', 'med'],
                  desc: 'A high-low read on the flat defender. Beats cover three, loses to man.',
-                 vsCov: { C0: -4, C1: -4, C2: 2, C3: 7, C4: 3, C2M: -5 }, vsPress: { R4: 0, R5: 0, R6: -3, ZB: 1 } },
+                 // C3 trimmed from 7 to 5 (Decided ruling, DESIGN.md 26.2):
+                 // one of the two largest positive numbers against cover
+                 // three, trimmed by the two points the ruling allows.
+                 vsCov: { C0: -4, C1: -4, C2: 2, C3: 5, C4: 3, C2M: -5 }, vsPress: { R4: 0, R5: 0, R6: -3, ZB: 1 } },
         MESH:  { name: 'Mesh', type: 'pass', depth: 'short', ttt: 2.3, risk: 1.0, yac: 0.8, complexity: 3,
                  forms: ['SPREAD', 'TRIPS'], reads: ['WR3', 'WR2', 'RB1'], tags: ['2nd', 'med', 'two'],
                  desc: 'Two crossers rub the man defenders. Beats man, average against zone. Hard to learn.',
@@ -83,7 +86,11 @@
         VERTS: { name: 'Four Verticals', type: 'pass', depth: 'deep', ttt: 3.0, risk: 1.6, yac: 0.4, complexity: 2,
                  forms: ['SPREAD', 'TRIPS'], reads: ['WR3', 'WR1', 'TE1'], tags: ['long', 'two'],
                  desc: 'Everyone runs deep. Beats cover three in the seams and cover one, loses to two deep safeties.',
-                 vsCov: { C0: 6, C1: 4, C2: -6, C3: 8, C4: -8, C2M: -6 }, vsPress: { R4: 0, R5: -4, R6: -9, ZB: -2 } },
+                 // C3 trimmed from 8 to 6 (Decided ruling, DESIGN.md 26.2):
+                 // the single largest positive number against cover three in
+                 // the whole matrix, trimmed by the two points the ruling
+                 // allows.
+                 vsCov: { C0: 6, C1: 4, C2: -6, C3: 6, C4: -8, C2M: -6 }, vsPress: { R4: 0, R5: -4, R6: -9, ZB: -2 } },
         POSTDIG: { name: 'Post and Dig', type: 'pass', depth: 'int', ttt: 2.7, risk: 1.2, yac: 0.4, complexity: 2,
                  forms: ['SPREAD', 'TRIPS', 'IFORM'], reads: ['WR2', 'WR1', 'RB1'], tags: ['2nd', 'med', 'long'],
                  desc: 'A deep post clears the safety and the dig comes underneath. Beats two-high zones, loses to a lurking linebacker in man.',
@@ -128,7 +135,11 @@
         C0:  { name: 'Cover zero', man: true,  deep: 0, boxAdd: 2, say: 'man coverage, no safety help' },
         C1:  { name: 'Cover one', man: true,  deep: 1, boxAdd: 1, say: 'man coverage, one deep safety' },
         C2:  { name: 'Cover two', man: false, deep: 2, boxAdd: 0, say: 'zone, two deep safeties, corners in the flats' },
-        C3:  { name: 'Cover three', man: false, deep: 1, boxAdd: 1, say: 'zone, three deep, four under, one safety down' },
+        // boxAdd raised from 1 (Decided ruling, DESIGN.md 26.2): the single
+        // deep safety frees a man into the box the same as a true man-under
+        // shell does, which is the run-support case for calling it on early
+        // downs at all.
+        C3:  { name: 'Cover three', man: false, deep: 1, boxAdd: 2, say: 'zone, three deep, four under, one safety down' },
         C4:  { name: 'Cover four', man: false, deep: 2, boxAdd: 0, say: 'quarters zone, four deep, three under' },
         C2M: { name: 'Two man', man: true,  deep: 2, boxAdd: 0, say: 'man underneath with two deep safeties' }
     };

@@ -78,8 +78,12 @@ for (c in PL.CONCEPTS) {
         var bw = PL.boxWeight(front, coverage, adjustment, form3Personnel);
         return { weight: bw.weight, box: bw.box, avg: cell(c, form3, front, coverage, 'R4', adjustment).avg };
     }
+    // Cover three's own box weight was raised (Decided ruling, DESIGN.md
+    // 26.2): OVER plus cover three, which used to land as a normal box, is
+    // now a loaded one, so the normal cell moved to OVER plus cover two,
+    // which still has no run-support bonus of its own.
     var light = boxCell('DIME', 'C2', 'NONE');
-    var normal = boxCell('OVER', 'C3', 'NONE');
+    var normal = boxCell('OVER', 'C2', 'NONE');
     var loaded = boxCell('OVER', 'C1', 'LOAD');
     console.log(con3.name + ': ' + [light, normal, loaded].map(function (x) {
         return x.weight + ' box of ' + x.box + ', ' + x.avg.toFixed(1);

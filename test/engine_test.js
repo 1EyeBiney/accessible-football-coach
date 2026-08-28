@@ -130,4 +130,24 @@ module.exports = function (t) {
     var vertsGood = avgYards('VERTS', 'SPREAD', 'C3', 250);
     var vertsBad = avgYards('VERTS', 'SPREAD', 'C4', 250);
     t.ok(vertsGood - vertsBad > 2, 'four verticals is worth several yards more against cover three than cover four');
+
+    // ---- fourthDownDecision: a trailing team does not gamble deep in its own territory before it is desperate (ISSUES.md, Milestone 7) ----
+    function fakeGame(homeScore, awayScore, quarter, clock, ball, dist) {
+        return { teams: [{ style: { aggression: 0.3 } }, { style: { aggression: 0.3 } }],
+                 score: [homeScore, awayScore], quarter: quarter, clock: clock, ball: ball, dist: dist };
+    }
+    t.eq(deps.game.fourthDownDecision(fakeGame(0, 9, 2, 400, 40, 1), 0), 'punt',
+         'down by more than a score in the second quarter, fourth and one from its own forty does not gamble');
+    t.eq(deps.game.fourthDownDecision(fakeGame(0, 9, 4, 90, 40, 1), 0), 'go',
+         'the same situation inside the last five minutes still goes for it - the gamble is worth it there');
+    t.eq(deps.game.fourthDownDecision(fakeGame(0, 3, 2, 400, 40, 1), 0), 'go',
+         'down by less than a score, the same fourth and one is untouched: only a real deficit trips the guard');
+    t.eq(deps.game.fourthDownDecision(fakeGame(9, 0, 2, 400, 40, 1), 0), 'go',
+         'a leading team in the same spot is untouched: the guard is about not compounding a deficit, not about caution in general');
+
+    // ---- fourthDownConfidence: always one of the three words, and predictable at the extremes ----
+    t.eq(deps.game.fourthDownConfidence(fakeGame(0, 0, 4, 90, 40, 1), 0), 'sure',
+         'a one-score-or-less-to-go fourth down is a sure call');
+    t.eq(deps.game.fourthDownConfidence(fakeGame(0, 30, 4, 60, 40, 8), 0), 'sure',
+         'a team that has nothing left but the clock is a sure call');
 };
