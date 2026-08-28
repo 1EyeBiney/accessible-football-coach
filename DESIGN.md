@@ -1,6 +1,6 @@
 # Accessible Football: Coach Career Simulator
 
-Game design document, draft 8. Started August 26, 2026.
+Game design document, draft 9. Started August 26, 2026.
 
 This is a living document. It is written so that a screen reader user can move through it by headings (H key in NVDA and JAWS). Every major section is a level 2 heading, and sub-topics are level 3. There are no tables in this document on purpose; anything that would normally be a table is written as a list or a paragraph so it reads cleanly.
 
@@ -256,6 +256,8 @@ Every adjustment costs them somewhere else. When they bracket X, the tight end s
 
 You do the same thing on defense. Your defensive coordinator tracks what the opponent is leaning on and proposes adjustments, and you decide whether to make them and accept the cost.
 
+Defensive tendencies (Decided, accepting proposal 2 in DESIGN_PROPOSALS.md). Every defensive staff has coverage and pressure preferences by down and distance, generated with the staff, and a strength that says how heavily it leans on them. Some staffs are patterned and can be read; some mix it up and give a coordinator nothing to work with. The offensive coordinator's belief store counts what he sees by situation, needs to see a habit repeat before he will commit to it, and will not commit at all to a staff whose most common call is under about a third of its snaps. Reading a defense is therefore worth something against some opponents and nothing against others, and film study before the game (section 6.3) is how a coach learns which kind he is facing before kickoff.
+
 ### 8.4 Injuries, clock, and special teams
 
 Injuries happen during play and are announced immediately with the assistant's first read ("Looks like an ankle, he's coming out"). The trainer's report comes after the game.
@@ -285,6 +287,7 @@ No player mode. You are always the coach.
 
 Attribute display on scouting reports: numbers, letter grades, words, or words with numbers on the detailed card.
 The end-of-season prestige formula (section 20.2).
+Blowout frequency: one game in four is decided by more than thirty-five points with random talent gaps, against about one in eight in real high school football. A tuning problem, measured in BALANCE_NOTES.md, not yet chased.
 Whether the weekly practice script is a fixed ten plays or scales with the practice slider (section 16.3).
 Working sizes to tune: playbook (4 formations, 24 plays) and call sheet (16 plays) at high school, and how they grow by level.
 How many seasons of missed expectations each boss archetype tolerates, and how reputation thresholds map to levels (section 17.2).
@@ -294,6 +297,8 @@ How long a season is at each level and how many seasons a career can run.
 Whether the head coach can ever call plays on both sides of the ball or must delegate one side once the staff is big enough. Partly answered: the defense mirrors the offense (section 16.6) and either side can be handed to its coordinator for a stretch or a whole run.
 
 ## 12. Change log
+
+Draft 9, August 27, 2026. After the first overnight build. Accepted both proposals from DESIGN_PROPOSALS.md: the quarterback works the progression in order, and defensive staffs have situational tendencies (sections 26.3 and 8.3). Decided the designated target mechanic (section 26.3) as the answer to how much a coordinator is worth. Ruled on cover three (section 26.2). Added the blowout frequency to the open questions.
 
 Draft 8, August 27, 2026. Folded in the outside reviews and the coach's responses (ideas.txt): reports become sound cues with three chimes and a key to hear them; injured players do not re-enter; an optional play clock; the play call flow now starts with the coordinator's suggestion, speaks "sub" inside the play name, carries confidence wording, and exposes call counts and success rates; a substitution list off the formation prompt; recovered players announced at change of possession; the AI produces text only; formation-based practice at major college and NFL with film as the game-day lever; recruiting board filters; disk saves as the real save; the weekly bar drives predictable systems with real tradeoffs and no silent point stealing; prestige settled once at year's end with in-season recruiting banked; postseason is playoffs only with attribute-matched small college games; defense shares the interface but not the mechanics; delegation as a first-class system (section 22); halftime and the postgame staff review (section 23); the world beyond the player's team and the rule that computer coaches are never omniscient (section 24); earned coach identity traits (section 17.5); legacy perks as options with a loadout cap; the MVP and build order (section 25); and a proposed snap resolution model for discussion (section 26).
 
@@ -817,13 +822,19 @@ Defensive fronts: four-man over, four-man under, three-man, nickel, dime, goal l
 
 Each offensive concept has an authored profile against each coverage family and front, a number in a range like minus fifteen to plus fifteen, written by hand with football reasoning rather than derived from attributes. Four verticals is strong against cover three (the seams) and weak against cover four and cover two (deep help). The quick game is strong against blitzes and soft coverage and weak against press with help. Play action is strong against one-high looks and aggressive run-fitting linebackers and weak against two-high shells with patient linebackers. Screens are strong against pressure and weak against contain. Inside zone is strong against light boxes and weak against a loaded box. Power is strong against undisciplined fronts and weak against a stout interior. Draws are strong against pass-rush fronts.
 
+Cover three ruling (Decided). Cover three is the most common base coverage in real high school football because it is sound against the run, and the matrix rightly lets several pass concepts beat it. The fix for it being the worst coverage in the harness is in the caller, not the matrix: the defensive play caller should treat cover three as a run-down and heavy-personnel call and lean to two-high coverages on obvious passing downs and against three-receiver sets, and the run defense benefit of the extra box defender has to be large enough that cover three earns its keep on first down. A small trim to the largest positive numbers against cover three is acceptable if the matrix check still shows the spreads.
+
 The scheme modifier from this matrix is a separate input from the player matchup edge. That is the whole point: a coach who only chases the biggest matchup edge will run into a coverage built to take it away, and a coach who reads the defense can call a concept that beats the coverage even without a talent edge. The coordinator's Scheme attribute scales how much of the matrix bonus the offense actually gets, and Execution scales it again, so a poorly practiced counter to the right coverage still sputters.
 
 ### 26.3 Pass plays: pressure, target, throw, catch, run
 
 Pressure. Each pass protection matchup (a lineman or back against a rusher) produces a net edge from pass block versus pass rush, adjusted by stamina and by the protection scheme (a chipping back, a tight end kept in). The sum gives a time to pressure. The concept has a time to throw: quick game under two seconds, intermediate about two and a half, deep shots over three, play action longer still. If pressure arrives first, the quarterback's Pocket and Decision decide what happens: a sack, a throwaway, a hurried throw with an accuracy penalty, or a scramble. A blitz shortens time to pressure but removes a defender from coverage, which loosens every receiver matchup and turns the quick game into the right answer.
 
-Target. The concept defines a progression of two or three reads. Each read is a receiver against the defender the coverage assigns to him: a man defender in man coverage, the nearest zone defender in zone with a penalty to separation but a bonus to the defender's help, plus any bracket or safety help from an adjustment. Separation comes from the receiver's Route, Release, and Speed against the defender's Coverage, Press, and Speed, plus the scheme modifier and live state. The quarterback's Decision picks the best open read, with an error chance that grows under pressure and shrinks with Awareness; a bad decision is how interceptions start.
+Target. The concept defines a progression of two or three reads. Each read is a receiver against the defender the coverage assigns to him: a man defender in man coverage, the nearest zone defender in zone with a penalty to separation but a bonus to the defender's help, plus any bracket or safety help from an adjustment. Separation comes from the receiver's Route, Release, and Speed against the defender's Coverage, Press, and Speed, plus the scheme modifier and live state.
+
+The quarterback works the progression in order (Decided, accepting proposal 1 in DESIGN_PROPOSALS.md). He throws the first read that is open enough, accepting less separation the deeper into the progression he goes, with a small accuracy cost for each read passed over. A decisive quarterback pulls the trigger sooner; when nothing comes open he settles for the best of a bad set. The error chance that sends the ball to the wrong man grows under pressure and shrinks with Decision and Awareness; a bad decision is how interceptions start. This is what makes a concept's read order mean something and what makes a bracket cost the offense real yards.
+
+The designated target (Decided). A play can be called with a target: the coach, or the coordinator's suggestion, names the receiver the play is meant to attack, and the quarterback starts his progression there and gives that read the benefit of the doubt. That is the mechanic that lets a coordinator's read reach inside the play rather than only choosing between plays, and it is the answer to the open question of how much a coordinator should be worth: a coach who trusts a hunch can force the ball to the matchup, and a coach who thinks the safety is about to roll over can leave the target off and let the quarterback work the whole progression. Forcing the ball has a cost. If the targeted receiver is bracketed or covered, the quarterback is late coming off him, so the sack, hurry, and bad-decision chances all rise, and a target that is forced repeatedly feeds the opponent's exploitation counter faster than a play that spreads the ball. The pre-game hunch, the M key matchups, and the coordinator's suggestion all carry a target when the staff has one; the coach can accept it, change it, or clear it.
 
 Throw and catch. Accuracy, and Arm on deep throws, against the separation and any hurry penalty gives completion, incompletion, breakup (the defender's Ball skills), or interception (a bad decision plus Ball skills). The receiver's Hands decides drops.
 

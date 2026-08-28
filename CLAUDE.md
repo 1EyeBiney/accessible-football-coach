@@ -56,6 +56,10 @@ Hunch is what engine/staff.js produces: source (OC, DC, SPOT, TRAINER), kind (ma
 GameController in engine/controller.js is the only thing the UI talks to for a game: start, pending (what input is needed next), suggestion for each side, callOffense, callDefense, substitutions, advance, reports, situationLine, halftime, final, and the play log. It returns strings and plain objects, never DOM.
 Saves are JSON: the full run state plus the coach profile, written by the browser download and read by the native file picker; localStorage holds only a crash-recovery copy.
 
+## Session start ritual
+
+Every session begins by reading, in this order: CLAUDE.md, PROGRESS.md (the running log), the latest MORNING_REPORT.md, ISSUES.md, and the KICKOFF file named in the opening prompt. The files are the project's memory; the conversation is not. If something in the files contradicts something you remember, the files win. Anything worth remembering must be written to PROGRESS.md or ISSUES.md before the session ends.
+
 ## Reporting to Brian
 
 Keep PROGRESS.md as a running log: one paragraph per milestone with what was built, what the harness said, what the reviewers found, and what was skipped. At the end of a session write MORNING_REPORT.md: what to open, the keys to press, what to listen for, what is known to be missing, and any decisions you need from him. Plain prose, no tables.
