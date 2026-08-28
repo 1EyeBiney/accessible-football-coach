@@ -14,6 +14,12 @@
     var el = {};
     var audio = null;
     var muted = false;
+    // True only while the native file picker is open. The focus trap below
+    // exists to pull focus back into the container from anything else on the
+    // page; the picker is the one deliberate exception DESIGN.md 21.10
+    // carves out, so the trap has to stand down for it rather than fight the
+    // browser for focus the moment the hidden file input takes it.
+    var trapSuspended = false;
 
     function grab() {
         el.init = document.getElementById('initBtn');
@@ -39,7 +45,7 @@
         });
         // Keep focus inside the container. If anything steals it, take it back.
         document.addEventListener('focusin', function (e) {
-            if (el.container.hidden) return;
+            if (el.container.hidden || trapSuspended) return;
             if (!el.container.contains(e.target) && e.target !== el.container) {
                 el.container.focus();
             }
@@ -156,17 +162,22 @@
     // the container, and the coach is left in silence not knowing whether he
     // is still in the game. One input was also left in the document on every
     // attempt.
-    function loadFromDisk(onLoaded, onCancel) {
+    // onError is optional; a caller that only wants to treat every failure as
+    // a cancel can omit it, the way this function used to behave.
+    function loadFromDisk(onLoaded, onCancel, onError) {
         var input = document.createElement('input');
         var settled = false;
         input.type = 'file';
         input.accept = 'application/json,.json';
         input.setAttribute('aria-hidden', 'true');
+        input.setAttribute('tabindex', '-1');
         input.style.position = 'fixed';
         input.style.left = '-9999px';
         document.body.appendChild(input);
+        trapSuspended = true;
 
         function cleanup() {
+            trapSuspended = false;
             window.removeEventListener('focus', onWindowFocus, true);
             if (input.parentNode) input.parentNode.removeChild(input);
             if (el.container && !el.container.hidden) el.container.focus();
@@ -189,7 +200,7 @@
             settled = true;
             var reader = new FileReader();
             reader.onload = function () { cleanup(); onLoaded(String(reader.result)); };
-            reader.onerror = function () { cleanup(); if (onCancel) onCancel(); };
+            reader.onerror = function () { cleanup(); if (onError) onError(); else if (onCancel) onCancel(); };
             reader.readAsText(f);
         });
         window.addEventListener('focus', onWindowFocus, true);

@@ -24,6 +24,8 @@ engine/game.js. The game loop: clock, downs, special teams, stamina, injuries, t
 
 engine/controller.js. The only surface the interface talks to for a game. It says what input is needed next, gives the coordinator's suggestion, takes the coach's call, and hands back announcements with a priority and a source. It returns strings and plain objects and never touches the page.
 
+engine/save.js. Turns a controller into plain JSON and back. The one place in the project that has to think about object identity: a player is serialised once, in the roster that owns him, and every other reference to him (a hunch's target, an event's carrier or tackler, a belief store's evidence) is saved as a tagged id and rebuilt into the same live object on load.
+
 ui/core.js. Interface logic that does not touch the page: the announce queue and its priorities, the speech sanitiser, menus, grids, the point allocation list, confirmations, the help viewer, and the ordered interceptor stack. Tested under Node.
 
 ui/help_text.js. Every word of help, split by mode, and the key description table the keyboard explorer reads.

@@ -43,3 +43,27 @@ There is dead wood left from the refactor that replaced the old memory counters 
 The step function returns nothing for a kickoff, a punt, a field goal or a quarter rolling over, and returns a result for a snap, so a caller stepping one at a time has to tell "no snap happened" from "the game is over" using a separate flag. That works and the controller does it correctly, but it wants a comment before more of the interface grows around it.
 
 The reviewer did not read the controller in full, because the file appeared after the review started and was not in its brief. Three findings came from a targeted scan of it and two of those were the sharpest in the list. The controller deserves a review pass of its own.
+
+## Accessibility auditor, session 2, after save and load
+
+Scoped to the new save/load feature only: main.js, ui/core.js, ui/screens.js, ui/help_text.js, engine/save.js, plus DESIGN.md 2, 19, and 21. Eight findings, ranked high to low. Five were fixed; three were checked and left with reasons.
+
+### Fixed
+
+Nothing actually stopped the pacing timer or the play clock's own key-press guard from applying to a stray keystroke that landed during the narrow gap between opening the native file picker and its callback firing, and worse, a confirmation opened in that gap was never cleared when the load finished, so the coach's next Enter, meant to accept his resumed game's play suggestion, could instead silently confirm a stale "quit to menu" and throw the game away. enterLoadedGame now clears state.confirm, state.help, and state.viewer defensively on every load, the same way Q already clears help and viewer when it quits.
+
+loadFromFile had no reentrancy guard: a second G or Shift G before the dialog had actually taken focus could open a second hidden file input with its own focus-restore logic fighting the first. It now refuses a second call while state.loading is already true.
+
+ui/dom.js's own focus trap was fighting the file picker it is meant to allow: the trap pulls focus back into the game container from anything outside it, and clicking the hidden file input to open the picker is exactly such a focusin event. A module-level trapSuspended flag, set for the life of loadFromDisk's call, tells the trap to stand down for the one case DESIGN.md 21.10 already carves out as the exception. The input also now carries tabindex="-1" to match the pattern the save-to-disk anchor already used.
+
+Resuming or loading a game that had already reached its final spoke "Resumed." followed by the ordinary situation line, which for a finished game is a stale down-and-distance sentence left over from the last snap, and never spoke the postgame staff review at all. It now speaks "Resumed. Final. [score]." followed by the same review lines a game that ends normally gets, and lands on the final screen rather than the game screen. Reaching this path in the first place needed a fix of its own: G only worked on the game screen, so there was no way to save a finished game to revisit later. G now also works on the final screen, documented in help and the keyboard explorer table for that mode.
+
+A FileReader error (an unreadable file) was routed into the same callback as the coach cancelling the dialog, so a real read failure was announced as "Cancelled." loadFromDisk now takes an optional third callback for a genuine error, distinct from a cancel, and screens.js uses it to say "Could not read that file" instead.
+
+### Checked and left
+
+The auditor's highest-severity finding was that no interceptor layer blocks a real keystroke from reaching the normal key handling during the file-picker gap, only the two timers check state.loading. In practice this window is the few synchronous lines inside loadFromFile between setting the flag and dom.js's own input.click(), which triggers the browser's native, focus-stealing dialog before any further JS runs; there is no async boundary in between for a real keypress to land in. The reentrancy guard and the defensive clearing above remove the worst consequences even if this reasoning about browser timing turns out to be wrong on some platform, so nothing more was done, but it is worth Brian testing directly: press G, then immediately try another key before the dialog visibly appears, on both NVDA and JAWS.
+
+The save-to-disk anchor element in ui/dom.js (a hidden, tabindex -1 anchor created and clicked to trigger the browser download, then removed within a tick) is technically a second standard control beyond the one file picker CLAUDE.md and DESIGN.md 21.10 name explicitly. It predates this session, is never focused or seen by the coach, and there is no other way to start a file download from a static page with no server. Left as a defensible technical necessity rather than a violation of the rule's intent.
+
+A defensive fix (clearing state.confirm on a load) does not have a test exercising the specific race that motivates it, because that race needs an asynchronous file-picker callback and test/shell_test.js's fake dom resolves loadFromDisk synchronously. The fix is cheap and correct on inspection; giving the fake dom a way to defer its callback so this can be driven through a real test is left for later rather than done under this milestone.

@@ -20,6 +20,13 @@
     function U() { return root.AF.ui; }
     function H() { return root.AF.help; }
     function CTRL() { return root.AF.controller; }
+    function SAVE() { return root.AF.save; }
+    function DOM() { return root.AF.dom; }
+
+    // The crash copy is one fixed key, holding at most the one run in
+    // progress (DESIGN.md 21.10). It is not the real save; it exists so a
+    // reload does not throw a game away by accident.
+    var CRASH_KEY = 'accessible-football-crash-v1';
 
     // ---------- the two authored programs (DESIGN.md 14.1, 14.2) ----------
 
@@ -180,6 +187,133 @@
         promptNext(app);
     }
 
+    // ---------- saving and loading a run (DESIGN.md 21.10) ----------
+
+    // Best effort and silent: a crash copy that cannot be written is not
+    // something to interrupt a game to complain about, and the real save
+    // (the file on disk) is what the coach actually relies on.
+    function autosave(app) {
+        var S = SAVE(), dom = DOM();
+        if (!S || !dom || !app.game) return;
+        try { dom.crashSave(CRASH_KEY, S.serialize(app.game)); } catch (e) { /* best effort */ }
+    }
+
+    function clearCrashSave() {
+        var dom = DOM();
+        if (dom) dom.crashSave(CRASH_KEY, '');
+    }
+
+    // Rebuilds the game and interface state around a loaded controller. Only
+    // the controller comes back from the file; every UI-navigation detail
+    // (which submenu was open, a formation half-picked) resets to the top of
+    // the current decision, which is exactly what the controller's own
+    // pending() already describes.
+    function enterLoadedGame(app, controller) {
+        var C = CTRL();
+        app.game = controller;
+        app.chosen = { home: controller.game.teams[0], away: controller.game.teams[1] };
+        app.offenseMode = controller.offenseMode;
+        app.defenseMode = controller.defenseMode;
+        app.playClock = controller.playClock;
+        app.reportThreshold = controller.reportThreshold;
+        app.state.verbosity = controller.verbosity;
+        app.state.mode = controller.over ? 'final' : 'game';
+        app.step = null;
+        app.pickedFormation = null;
+        app.pendingTempo = 'huddle';
+        app.defCall = null;
+        app.state.lastContext = 'the game';
+        // A load replaces whatever screen the coach was on. Any confirmation,
+        // help, or open list from before it belongs to a game that may no
+        // longer exist and must not swallow the coach's next key (the same
+        // reason Q clears state.help and state.viewer when it quits, below).
+        app.state.confirm = null;
+        app.state.help = null;
+        app.state.viewer = null;
+        if (controller.over) {
+            var fin = C.final(controller);
+            say(app, 'Resumed. Final. ' + fin.line + '.', 'result');
+            fin.review.forEach(function (line) { say(app, line, 'batched'); });
+            say(app, 'Press Enter to return to the menu.', 'batched');
+        } else {
+            say(app, 'Resumed. ' + C.situationLine(controller), 'result');
+            promptNext(app);
+        }
+    }
+
+    // The picker and the crash copy both finish outside the normal key
+    // press, so nothing is waiting to call speakQueue() the way main.js does
+    // after every key. AF.main.announceNow() is the same drain-and-speak the
+    // pacing timer uses for the same reason, exposed for this one other
+    // caller (main.js).
+    function speakNow() {
+        if (root.AF.main && root.AF.main.announceNow) root.AF.main.announceNow();
+    }
+
+    // The shared tail of both G and Shift G, and of the menu's Resume and
+    // Load: open the picker, or read the crash copy, and either announce the
+    // game as it stood or explain why it could not be loaded. state.loading
+    // keeps the pacing timer and the play clock from firing blind while the
+    // native dialog has the operating system's focus, not the page's.
+    function loadFromFile(app) {
+        var dom = DOM(), S = SAVE();
+        if (!dom || !S) { say(app, 'Loading is not available.', 'result'); return; }
+        // Guards a keystroke that lands between setting the flag below and
+        // the native dialog actually taking focus from repeating the file
+        // picker call and opening a second one.
+        if (app.state.loading) { say(app, 'Already opening the file picker.', 'result'); return; }
+        chatter(app, 'Opening your file picker.');
+        try {
+            app.state.loading = true;
+            dom.loadFromDisk(function (text) {
+                app.state.loading = false;
+                finishLoad(app, text, 'the file');
+                speakNow();
+            }, function () {
+                app.state.loading = false;
+                say(app, 'Cancelled. ' + contextLine(app), 'result');
+                speakNow();
+            }, function () {
+                app.state.loading = false;
+                say(app, 'Could not read that file. ' + contextLine(app), 'result');
+                speakNow();
+            });
+        } catch (e) {
+            app.state.loading = false;
+            say(app, 'Could not open the file picker. ' + contextLine(app), 'result');
+        }
+    }
+
+    function loadFromCrash(app) {
+        var dom = DOM(), S = SAVE();
+        if (!dom || !S) { say(app, 'Loading is not available.', 'result'); return; }
+        var text = dom.crashLoad(CRASH_KEY);
+        if (!text) { say(app, 'There is no crash copy to resume.', 'result'); return; }
+        finishLoad(app, text, 'the crash copy');
+    }
+
+    // Shared by G on the game screen and G on the final screen: a finished
+    // game is still a run worth keeping, if only to hear the postgame staff
+    // review again later.
+    function saveToFile(app) {
+        var S = SAVE(), dom = DOM(), wrote = false;
+        if (S && dom) {
+            try { wrote = dom.saveToDisk('accessible-football-save.json', S.serialize(app.game)); }
+            catch (e) { wrote = false; }
+        }
+        say(app, wrote ? 'Game saved to a file.' : 'Could not save the game to a file.', 'result');
+    }
+
+    function finishLoad(app, text, source) {
+        var S = SAVE(), controller;
+        try { controller = S.deserialize(app.deps, text); }
+        catch (e) {
+            say(app, 'Could not read ' + source + '. It may not be an Accessible Football save file. ' + contextLine(app), 'result');
+            return;
+        }
+        enterLoadedGame(app, controller);
+    }
+
     // ---------- the between-play loop (DESIGN.md 19.3) ----------
 
     // Speak a list of announcements the controller handed back, in the order
@@ -211,12 +345,17 @@
         app.step = null;
         if (p.kind === 'over') {
             app.state.mode = 'final';
+            // Nothing left to resume once the game has a final.
+            clearCrashSave();
             // Batched, so it sorts behind the postgame review rather than in
             // front of it. Spoken first, it invites the coach to press Enter
             // and lose the verdicts on his own assistants.
             say(app, 'Press Enter to return to the menu.', 'batched');
             return;
         }
+        // The crash copy, refreshed at every decision point so a reload never
+        // loses more than the current snap (DESIGN.md 21.10).
+        autosave(app);
         if (p.kind === 'substitution') {
             say(app, p.hunch.text + ' Y takes him out now, N leaves him in, L at the next personnel change, K at the next dead ball.', 'must', p.hunch.source);
             app.step = 'sub-answer';
@@ -458,10 +597,8 @@
                 say(app, U().helpAnnounce(state.help), 'result');
                 return { say: 'help' };
             }
-            if (item.id === 'RESUME' || item.id === 'LOAD') {
-                say(app, 'Saving and loading are not built yet. Choose new game.', 'result');
-                return { say: 'todo' };
-            }
+            if (item.id === 'RESUME') { loadFromCrash(app); return { say: 'resume' }; }
+            if (item.id === 'LOAD') { loadFromFile(app); return { say: 'load' }; }
         }
         if (key.name === 'Escape') { say(app, 'You are at the main menu.', 'result'); return { say: 'here' }; }
         return null;
@@ -536,6 +673,7 @@
         if (key.name === 'Enter') { app.game = null; toMenu(app); return { say: 'menu' }; }
         if (key.name === 'Escape') { say(app, 'The game is over. Press Enter for the menu.', 'result'); return { say: 'here' }; }
         if (key.name === 'Tab') { say(app, CTRL().final(app.game).line, 'result'); return { say: 'score' }; }
+        if (key.name === 'g' && !key.shift) { saveToFile(app); return { say: 'save' }; }
         return null;
     }
 
@@ -572,24 +710,8 @@
             return { say: 'mode' };
         }
         if (key.name === 'g') {
-            // Saving a whole run is not built. What can be saved tonight is
-            // the play by play, which goes to a file and to the clipboard so
-            // it can be pasted somewhere and read back (DESIGN.md 21.6 copies
-            // the scorecard the same way).
-            if (key.shift) {
-                say(app, 'Loading a saved game is not built yet. Nothing has been lost; the game is still here.', 'result');
-                return { say: 'todo' };
-            }
-            var text = app.game.log.join('\n');
-            var dom = root.AF.dom;
-            var wrote = dom ? dom.saveToDisk('accessible-football-play-by-play.txt', text) : false;
-            var copied = dom ? dom.copyToClipboard(text) : false;
-            var parts = [];
-            if (wrote) parts.push('Play by play written to a file.');
-            if (copied) parts.push('It is on the clipboard too.');
-            if (!wrote && !copied) parts.push('Could not save the play by play.');
-            parts.push('Saving a whole game is not built yet.');
-            say(app, parts.join(' '), 'result');
+            if (key.shift) { loadFromFile(app); return { say: 'load' }; }
+            saveToFile(app);
             return { say: 'save' };
         }
 

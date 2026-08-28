@@ -69,8 +69,8 @@
         l('E does the same for the defense.'),
         l('The third setting is the one most coaches use. The game runs itself and stops you on third and fourth down, in the red zone, in the last two minutes, and when a coordinator is sure about something.'),
         h('Saving'),
-        l('G writes the play by play to a file on your disk and puts it on the clipboard as well.'),
-        l('Saving a whole game so you can come back to it is not built yet. If you reload the page you will lose the game in progress.')
+        l('G saves the whole game to a file on your disk. Shift G opens your file picker to load one back, at the point it was saved.'),
+        l('The game also keeps a copy in your browser after every decision, in case of a crash. The main menu offers it as Resume.')
     ];
 
     var MENU_SCREENS = [
@@ -112,7 +112,7 @@
         game: [NAV].concat(GAME, GLOBAL),
         viewer: [NAV].concat(VIEWER, GLOBAL),
         halftime: [NAV].concat([h('Halftime'), l('Your staff gives you three things they have learned, two things the other side has changed, and your biggest personnel problem. Then you pick one thing to change. Up and down move, Enter chooses.')], GLOBAL),
-        final: [NAV].concat([h('After the game'), l('You hear the score and a short word on each of your assistants. Enter returns to the menu.')], GLOBAL)
+        final: [NAV].concat([h('After the game'), l('You hear the score and a short word on each of your assistants. Enter returns to the menu. G saves the finished game to a file, if you want to come back to that review later.')], GLOBAL)
     };
 
     function helpFor(mode) { return HELP_BY_MODE[mode] || HELP_BY_MODE.game; }
@@ -164,6 +164,9 @@
             e: 'Defense. Who calls the defense.',
             l: 'Play clock. Off, relaxed, standard or fast.',
             b: 'Reports setting.'
+        },
+        final: {
+            g: 'Save the finished game to a file.'
         },
         viewer: {
             h: 'Heading. Moves to the next heading. Shift H moves to the previous one.'

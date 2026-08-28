@@ -257,7 +257,13 @@
     function newState(mode) {
         return { mode: mode || 'boot', confirm: null, explore: false, help: null,
                  viewer: null, pacing: 'medium', verbosity: 'full', lastReport: '',
-                 lastContext: '' };
+                 lastContext: '',
+                 // True while the native file picker or save dialog is open. No
+                 // real keydown reaches the page while it has focus, but the
+                 // pacing timer and the play clock are our own code and would
+                 // otherwise fire blind into whatever is waiting when it closes
+                 // (DESIGN.md 21.10, 21.8).
+                 loading: false };
     }
 
     // key is { name, shift, ctrl, alt }

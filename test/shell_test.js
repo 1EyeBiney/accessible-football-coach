@@ -17,7 +17,7 @@ var root = path.join(__dirname, '..');
 function load() {
     global.AF = {};
     ['engine/rng.js', 'engine/players.js', 'engine/plays.js', 'engine/resolve.js',
-     'engine/staff.js', 'engine/game.js', 'engine/controller.js',
+     'engine/staff.js', 'engine/game.js', 'engine/controller.js', 'engine/save.js',
      'ui/core.js', 'ui/help_text.js', 'ui/screens.js'].forEach(function (f) {
         delete require.cache[require.resolve(path.join(root, f))];
         require(path.join(root, f));
@@ -25,8 +25,31 @@ function load() {
     return global.AF;
 }
 
-function driver(AF) {
+// A stand-in for ui/dom.js's file and storage side, so the shell can be
+// driven through G, Shift G, and Resume without a browser. A "file" is one
+// slot, the way a coach only has one file open at a time; a picker with
+// nothing saved yet cancels, the same as dismissing the real dialog.
+function fakeDom() {
+    var crash = {}, savedFile = null;
+    return {
+        saveToDisk: function (name, json) { savedFile = json; return true; },
+        loadFromDisk: function (onLoaded, onCancel) {
+            if (savedFile === null) { onCancel(); return; }
+            onLoaded(savedFile);
+        },
+        crashSave: function (key, json) { crash[key] = json || null; return true; },
+        crashLoad: function (key) { return crash[key] || null; },
+        copyToClipboard: function () { return true; },
+        announce: function () {},
+        panel: function () {},
+        tone: function () {},
+        setMuted: function () {}
+    };
+}
+
+function driver(AF, dom) {
     var spoken = [], tones = [];
+    AF.dom = dom || fakeDom();
     var app = AF.screens.newApp({
         Rng: AF.Rng, players: AF.players, plays: AF.plays,
         resolve: AF.resolve, staff: AF.staff, game: AF.game
@@ -36,7 +59,7 @@ function driver(AF) {
         panel: function () {}
     });
     return {
-        app: app, spoken: spoken, tones: tones,
+        app: app, spoken: spoken, tones: tones, dom: AF.dom,
         key: function (name, shift, ctrl) {
             AF.screens.handleKey(app, { name: name, shift: !!shift, ctrl: !!ctrl, alt: false });
             return this;
@@ -329,4 +352,100 @@ module.exports = function (t) {
         d8.key('Enter');
     }
     t.ok(hitGate, 'a substitution was asked for at some point in the game');
+
+    // ---------- G saves, Shift G loads it back (DESIGN.md 21.10) ----------
+    var d9 = driver(AF);
+    AF.screens.boot(d9.app);
+    d9.key('Enter').key('Enter').key('Enter');   // new game, first team, kick off
+    var g6 = 0;
+    while (d9.app.game.log.length < 5 && g6++ < 400) {
+        if (d9.app.state.viewer) { d9.key('Escape'); continue; }
+        if (d9.app.step === 'sub-answer') { d9.key('n'); continue; }
+        d9.key('Enter');
+    }
+    var scoreBefore = d9.app.game.game.score.slice();
+    var snapsBefore = d9.app.game.log.length;
+    n = d9.count();
+    d9.key('g');
+    t.ok(d9.since(n).indexOf('saved') >= 0, 'G says the game was saved');
+
+    // A fresh driver, a fresh controller, sharing nothing with d9 except the
+    // one saved file the fake picker hands back. d9's dom also carries d9's
+    // own autosaved crash copy, which is exactly why this reaches for Load
+    // (the file, item three) rather than Resume (the crash copy, item two):
+    // the point of this scenario is the explicit save-to-file round trip.
+    var d10 = driver(AF, d9.dom);
+    AF.screens.boot(d10.app);
+    t.eq(d10.app.game, null, 'the new driver starts with no game of its own');
+    d10.key('ArrowDown');    // Resume
+    d10.key('ArrowDown');    // Load save file
+    n = d10.count();
+    d10.key('Enter');
+    t.eq(d10.app.state.mode, 'game', 'loading the file lands the second driver in the game');
+    t.ok(d10.since(n).toLowerCase().indexOf('resumed') >= 0, 'loading announces that the game resumed');
+    t.eq(d10.app.game.log.length, snapsBefore, 'the loaded game has exactly the snaps that were saved');
+    t.eq(d10.app.game.game.score[0], scoreBefore[0], 'the loaded home score matches what was saved');
+    t.eq(d10.app.game.game.score[1], scoreBefore[1], 'the loaded away score matches what was saved');
+
+    // Playing on from the load reaches a real final, the same as any game.
+    var g7 = 0;
+    while (d10.app.state.mode !== 'final' && g7++ < 6000) {
+        if (d10.app.state.viewer) { d10.key('Escape'); continue; }
+        if (d10.app.step === 'sub-answer') { d10.key('n'); continue; }
+        d10.key('Enter');
+    }
+    t.eq(d10.app.state.mode, 'final', 'a loaded game can be played all the way to its final');
+
+    // ---------- Resume picks up the crash copy without a file ----------
+    var d11 = driver(AF);
+    AF.screens.boot(d11.app);
+    d11.key('Enter').key('Enter').key('Enter');
+    var g8 = 0;
+    while (d11.app.game.log.length < 3 && g8++ < 400) {
+        if (d11.app.state.viewer) { d11.key('Escape'); continue; }
+        if (d11.app.step === 'sub-answer') { d11.key('n'); continue; }
+        d11.key('Enter');
+    }
+    var snapsAtCrash = d11.app.game.log.length;
+    // Nothing was saved to a file; the autosave after every decision is what
+    // Resume reads.
+    var d12 = driver(AF, d11.dom);
+    AF.screens.boot(d12.app);
+    d12.key('ArrowDown');   // Resume is the second item on the main menu
+    n = d12.count();
+    d12.key('Enter');
+    t.eq(d12.app.state.mode, 'game', 'Resume lands in the game');
+    t.eq(d12.app.game.log.length, snapsAtCrash, 'Resume picks up exactly where the crash copy left off');
+    t.ok(d12.since(n).toLowerCase().indexOf('resumed') >= 0, 'Resume announces that the game resumed');
+
+    // Note on a related finding: the accessibility auditor also flagged that
+    // nothing cleared state.confirm on a load, which matters only for the
+    // narrow race where a real keystroke sets a confirmation during the gap
+    // between opening the native file picker and its callback firing.
+    // enterLoadedGame now clears state.confirm/help/viewer defensively (the
+    // fix is real and costs nothing), but that specific race needs an
+    // asynchronous file picker to reproduce and this driver's fake one
+    // resolves synchronously, so it is not exercised here. See REVIEW_NOTES.md.
+
+    // ---------- loading a finished game announces the final, not a stale down and distance ----------
+    var d14 = driver(AF);
+    AF.screens.boot(d14.app);
+    d14.key('Enter').key('Enter').key('Enter');
+    var g9 = 0;
+    while (d14.app.state.mode !== 'final' && g9++ < 6000) {
+        if (d14.app.state.viewer) { d14.key('Escape'); continue; }
+        if (d14.app.step === 'sub-answer') { d14.key('n'); continue; }
+        if (d14.app.state.mode === 'halftime') { d14.key('Enter'); continue; }
+        d14.key('Enter');
+    }
+    d14.key('g');
+    var d15 = driver(AF, d14.dom);
+    AF.screens.boot(d15.app);
+    d15.key('ArrowDown'); d15.key('ArrowDown');   // Resume, then Load save file
+    n = d15.count();
+    d15.key('Enter');
+    t.eq(d15.app.state.mode, 'final', 'loading a game that had already finished lands on the final screen, not the game screen');
+    var finalSaid = d15.since(n);
+    t.ok(finalSaid.toLowerCase().indexOf('final') >= 0, 'loading a finished game announces it as a final');
+    t.ok(!/\d+(st|nd|rd|th) down/.test(finalSaid), 'loading a finished game does not read out a stale down and distance');
 };

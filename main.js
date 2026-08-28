@@ -48,6 +48,15 @@
         return text;
     }
 
+    // Called by ui/screens.js when a file picker or a crash-copy load
+    // finishes outside any key press, so nothing else is waiting to drain the
+    // queue and re-arm the timers the way onKeyDown does below.
+    function announceNow() {
+        var said = speakQueue();
+        scheduleAuto(said);
+        startPlayClock();
+    }
+
     // ---------- the pause before the game moves on its own ----------
 
     // Pacing is for what happens without the coach pressing a key: a side he
@@ -59,7 +68,7 @@
         // Nothing auto-advances while the coach has something open. Without
         // this the timer presses Enter into a confirmation and throws the game
         // away, closes help mid-sentence, or fights the keyboard explorer.
-        if (app.state.confirm || app.state.help || app.state.viewer || app.state.explore) return;
+        if (app.state.confirm || app.state.help || app.state.viewer || app.state.explore || app.state.loading) return;
         var pending = AF.controller.pending(app.game);
         if (!pending || pending.kind !== 'auto') return;
         if (app.state.pacing === 'manual') return;
@@ -90,7 +99,7 @@
         if (!secs) return;
         var p = AF.controller.pending(app.game);
         if (!p || (p.kind !== 'offense' && p.kind !== 'defense')) return;
-        if (app.state.confirm || app.state.help || app.state.viewer || app.state.explore) return;
+        if (app.state.confirm || app.state.help || app.state.viewer || app.state.explore || app.state.loading) return;
         clockLeft = secs;
         clockTimer = root.setInterval(function () {
             clockLeft--;
@@ -195,5 +204,6 @@
 
     root.AF = root.AF || {};
     root.AF.main = { restart: start, getApp: function () { return app; },
-                     stopPlayClock: stopPlayClock, cancelAuto: cancelAuto };
+                     stopPlayClock: stopPlayClock, cancelAuto: cancelAuto,
+                     announceNow: announceNow };
 })(typeof window !== 'undefined' ? window : globalThis);
