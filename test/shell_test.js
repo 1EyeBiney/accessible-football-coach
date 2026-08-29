@@ -529,7 +529,7 @@ module.exports = function (t) {
     // play's prompt so main.js can put the referee whistle in the gap.
     var events = [];
     var d19 = driver(AF);
-    d19.app.out.boundary = function () { events.push('[boundary]'); };
+    d19.app.out.boundary = function (kind) { events.push('[boundary ' + (kind || 'whistle') + ']'); };
     var origSay = d19.app.out.say;
     d19.app.out.say = function (text, priority, source) {
         events.push(text);
@@ -537,10 +537,11 @@ module.exports = function (t) {
     };
     AF.screens.boot(d19.app);
     d19.key('Enter').key('Enter').key('Enter');
-    t.ok(events.indexOf('[boundary]') >= 0, 'entering the game places a whistle boundary before the first prompt');
+    t.ok(events.indexOf('[boundary whistle]') >= 0, 'entering the game places a whistle boundary before the first prompt');
 
     // Play a stretch of snaps; every one that produced a result and a next
-    // prompt must have a boundary between them, never after the prompt.
+    // prompt must have the chain: result, whistle boundary, down and
+    // distance, set boundary, then the rest of the prompt.
     var g19 = 0, sawSnap = false;
     while (d19.app.state.mode === 'game' && g19++ < 120) {
         events.length = 0;
@@ -552,9 +553,13 @@ module.exports = function (t) {
         if ((stepBefore === 'offense-suggest' || stepBefore === 'defense-suggest') &&
             (d19.app.step === 'offense-suggest' || d19.app.step === 'defense-suggest')) {
             sawSnap = true;
-            var b = events.indexOf('[boundary]');
-            t.ok(b > 0, 'a snap places the boundary after the result, not before it');
-            t.ok(b < events.length - 1, 'and the next prompt comes after the boundary');
+            var b = events.indexOf('[boundary whistle]');
+            var s19 = events.indexOf('[boundary set]');
+            t.ok(b > 0, 'a snap places the whistle boundary after the result, not before it');
+            t.ok(s19 > b + 1, 'the down and distance sits between the whistle and the set tone');
+            t.ok(/at (our own|their|the fifty)/.test(events[s19 - 1]),
+                 'and the line before the set tone is the down and distance');
+            t.ok(s19 < events.length - 1, 'the rest of the prompt comes after the set tone');
             break;
         }
         if (d19.app.state.mode === 'halftime') { d19.key('Enter'); }

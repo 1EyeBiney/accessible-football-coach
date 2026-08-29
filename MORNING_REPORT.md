@@ -10,7 +10,9 @@ Open index.html and press Enter on the button, same as always. Nothing about get
 
 After every play, you now hear the result as its own utterance, then one of your eight referee whistles, then the next suggestion as a separate utterance. The whistle is the ready-for-play whistle: everything before it belongs to the play that just happened, everything after it belongs to the next one. No two whistles repeat until all eight have been heard, and which one plays is chosen outside the game's seed, so replays are untouched. The play clock, when you have it on, now starts at the whistle, like real football.
 
-The timing to listen for: the whistle is scheduled off the same speech-length estimate the auto-advance already uses, so on medium pacing it should land near the end of the result rather than on top of it. If your NVDA rate is much faster than average, the gap may feel long; press any key and the game does not wait — your key always wins, and anything still owed to you is spoken immediately. P still changes pacing if the rhythm feels wrong, and that is the first thing to try.
+The timing, retuned after your first listen: the whistle now fires at half the speech-length estimate, so at your rate it should land on the tail of the announcement rather than leaving a dead gap - impinging on purpose, as you asked. P still scales it, any key still wins immediately.
+
+The call prompt has a new shape, also from your notes: after the whistle you hear the down and distance on its own, then a short tone, then the call - on defense, the personnel they show, then the suggestion. The tone is synthesised, not a file, so its length is exact and the prompt follows tight on its end.
 
 ## The defensive look
 

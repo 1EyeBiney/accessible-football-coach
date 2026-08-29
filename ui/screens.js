@@ -126,11 +126,12 @@
 
     function tone(app, name) { if (app.out.tone) app.out.tone(name); }
 
-    // The ready-for-play boundary: everything said so far is the old play,
-    // everything after belongs to the next one, and the interface plays the
-    // referee whistle in the gap (ISSUES.md 2026-08-28). Optional on the out
-    // object so the Node test drivers that predate it keep working.
-    function boundary(app) { if (app.out.boundary) app.out.boundary(); }
+    // A boundary between utterances, with the sound that belongs in the gap:
+    // no kind means the ready-for-play whistle; 'set' is the short synthesised
+    // tone between the down and distance and the rest of the call prompt
+    // (ISSUES.md 2026-08-28). Optional on the out object so the Node test
+    // drivers that predate it keep working.
+    function boundary(app, kind) { if (app.out.boundary) app.out.boundary(kind); }
 
     // ---------- screen transitions ----------
 
@@ -395,6 +396,14 @@
         var s = C.suggestion(app.game, side);
         app.step = side === 'offense' ? 'offense-suggest' : 'defense-suggest';
         app.suggested = s;
+        // Every call prompt leads with the down and distance, then the set
+        // tone, then the rest: the look and the suggestion. The tone is
+        // synthesised, so its length is known exactly and the gap between the
+        // two utterances is tight (ISSUES.md 2026-08-28).
+        if (C.shortSituation) {
+            say(app, C.shortSituation(app.game), 'result');
+            boundary(app, 'set');
+        }
         // Real defenses match personnel: before the coach's own defensive
         // call, say what the offense is showing, which is exactly what the
         // engine's own coordinator is handed (DESIGN.md 16.5, ISSUES.md

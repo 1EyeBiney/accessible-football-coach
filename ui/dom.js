@@ -102,7 +102,11 @@
         tick:    { freq: 900, type: 'sine',     dur: 0.03 },
         clock:   { freq: 520, type: 'square',   dur: 0.06 },
         clockLate: { freq: 700, type: 'square', dur: 0.09 },
-        score:   { freq: 780, type: 'triangle', dur: 0.30 }
+        score:   { freq: 780, type: 'triangle', dur: 0.30 },
+        // The set tone: between the down and distance and the rest of the
+        // call prompt. Synthesised, so its length is known exactly and the
+        // speaker can time the next utterance right off its end.
+        set:     { freq: 480, type: 'triangle', dur: 0.15 }
     };
 
     function tone(name) {

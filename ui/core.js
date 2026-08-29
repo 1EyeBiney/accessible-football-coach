@@ -69,7 +69,7 @@
     var PRIORITY_ORDER = { result: 0, must: 1, batched: 2, ui: 3 };
 
     function makeQueue() {
-        return { items: [], seq: 0, speaking: null, segment: 0 };
+        return { items: [], seq: 0, speaking: null, segment: 0, marks: {}, lastMark: null };
     }
 
     // report marks football the coach may ask to hear again with C, as
@@ -92,13 +92,19 @@
         return q;
     }
 
-    // Marks the whistle boundary. A boundary in front of nothing is not a
-    // boundary, so an empty segment is never created and the whistle never
-    // plays in front of silence.
-    function queueBoundary(q) {
+    // Marks a boundary. kind names the sound that belongs in the gap:
+    // 'whistle' (the default, a recorded clip) or 'set' (a short synthesised
+    // tone between the down and distance and what the offense shows). A
+    // boundary in front of nothing is not a boundary, so an empty segment is
+    // never created and no sound ever plays in front of silence.
+    function queueBoundary(q, kind) {
         var i, cur = q.segment || 0;
         for (i = 0; i < q.items.length; i++) {
-            if ((q.items[i].segment || 0) === cur) { q.segment = cur + 1; return q; }
+            if ((q.items[i].segment || 0) === cur) {
+                q.marks[cur] = kind || 'whistle';
+                q.segment = cur + 1;
+                return q;
+            }
         }
         return q;
     }
@@ -111,7 +117,9 @@
     }
 
     // One utterance: every item of the earliest segment still queued. What
-    // remains after a boundary stays queued for after the whistle.
+    // remains after a boundary stays queued for after the boundary's sound.
+    // lastMark remembers which sound the just-drained segment owes, for the
+    // speaker to read with lastBoundaryKind.
     function dequeueSegment(q) {
         if (!q.items.length) return [];
         var seg = q.items[0].segment || 0;
@@ -120,12 +128,21 @@
             out.push(q.items.shift());
         }
         q.speaking = out[out.length - 1] || null;
+        q.lastMark = q.marks[seg] || null;
+        delete q.marks[seg];
         return out;
     }
 
+    // The sound owed after the segment dequeueSegment just drained, when
+    // more speech waits behind it: 'whistle', 'set', or null.
+    function lastBoundaryKind(q) { return q.lastMark || null; }
+
     function queueHasItems(q) { return q.items.length > 0; }
 
-    function queueClear(q) { q.items = []; q.speaking = null; q.segment = 0; return q; }
+    function queueClear(q) {
+        q.items = []; q.speaking = null; q.segment = 0; q.marks = {}; q.lastMark = null;
+        return q;
+    }
 
     // ---------- pacing (DESIGN.md 21.8) ----------
 
@@ -395,6 +412,7 @@
         sanitize: sanitize, numberWords: numberWords,
         makeQueue: makeQueue, enqueue: enqueue, dequeue: dequeue, queueClear: queueClear,
         queueBoundary: queueBoundary, dequeueSegment: dequeueSegment, queueHasItems: queueHasItems,
+        lastBoundaryKind: lastBoundaryKind,
         PRIORITY_ORDER: PRIORITY_ORDER, PACING: PACING, PACING_ORDER: PACING_ORDER, pauseFor: pauseFor,
         makeMenu: makeMenu, menuAnnounce: menuAnnounce, menuMove: menuMove, menuSelect: menuSelect,
         menuFastForward: menuFastForward,

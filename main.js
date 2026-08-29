@@ -34,7 +34,7 @@
             say: function (text, priority, source, report) { AF.ui.enqueue(queue, text, priority, source, report); },
             tone: function (name) { AF.dom.tone(name); },
             panel: function (lines) { AF.dom.panel(lines); },
-            boundary: function () { AF.ui.queueBoundary(queue); }
+            boundary: function (kind) { AF.ui.queueBoundary(queue, kind); }
         };
     }
 
@@ -64,43 +64,75 @@
         return text;
     }
 
-    // What happens after an utterance: if a whistle boundary is holding more
-    // speech, schedule the whistle; otherwise arm the ordinary timers. The
-    // suggestion is gated on the whistle clip actually ending, never on a
-    // duration guess - we always know when our own clip finishes and never
-    // know when the screen reader does (the golf yield pattern, ISSUES.md
-    // 2026-08-28).
+    // What happens after an utterance: if a boundary is holding more speech,
+    // schedule the boundary's sound - the recorded whistle, or the short
+    // synthesised set tone - and release the next utterance off the sound's
+    // actual end. Otherwise arm the ordinary timers. We always know when our
+    // own sound finishes and never know when the screen reader does (the
+    // golf yield pattern, ISSUES.md 2026-08-28).
     function proceed(said) {
-        if (AF.ui.queueHasItems(queue)) { scheduleWhistle(said); return; }
+        if (AF.ui.queueHasItems(queue)) {
+            if (AF.ui.lastBoundaryKind(queue) === 'set') scheduleSetTone(said);
+            else scheduleWhistle(said);
+            return;
+        }
         scheduleAuto(said);
         startPlayClock();
     }
 
-    // The pause before the whistle is the pacing estimate for what was just
-    // said, so the whistle lands near the end of the result rather than on
-    // top of its first words. Manual pacing gates game advancement, not the
-    // speech the coach's own action produced, so it borrows the medium
-    // estimate here rather than holding the prompt hostage to another key.
+    // The guard shared by both boundary continuations. Today nothing can
+    // open a confirmation, help, a viewer, the explorer, or the picker
+    // except a keypress, and every keypress bumps the generation. The guard
+    // is here for the first future feature that opens one from a timer or a
+    // controller event: the held segment must then stay queued for the next
+    // keypress rather than speak over what is open.
+    function uiIsOpen() {
+        return !!(app && (app.state.confirm || app.state.help || app.state.viewer ||
+                          app.state.explore || app.state.loading));
+    }
+
+    // The pause before the whistle is HALF the pacing estimate for what was
+    // just said, so the whistle lands on the tail of the result rather than
+    // leaving a dead gap after it - Brian would rather the whistle impinge
+    // on the announcement than wait for a guess at its end, and a fast
+    // screen reader voice makes the full estimate a long overshoot. P still
+    // scales it. Manual pacing gates game advancement, not the speech the
+    // coach's own action produced, so it borrows the medium estimate.
     function scheduleWhistle(said) {
         cancelWhistle();
         var mode = app.state.pacing === 'manual' ? 'medium' : app.state.pacing;
-        var wait = AF.ui.pauseFor(said, mode);
+        var wait = AF.ui.pauseFor(said, mode) * 0.5;
         whistleTimer = root.setTimeout(function () {
             whistleTimer = null;
             var gen = ++whistleGen;
             AF.dom.playClip('whistle', function () {
                 if (gen !== whistleGen) return;
-                // Today nothing can open a confirmation, help, a viewer, the
-                // explorer, or the picker except a keypress, and every
-                // keypress bumps the generation above. The guard is here for
-                // the first future feature that opens one from a timer or a
-                // controller event: the held segment must then stay queued
-                // for the next keypress rather than speak over what is open.
-                if (app && (app.state.confirm || app.state.help || app.state.viewer ||
-                            app.state.explore || app.state.loading)) return;
+                if (uiIsOpen()) return;
                 proceed(speakSegment());
             });
-        }, Math.max(400, wait));
+        }, Math.max(300, wait));
+    }
+
+    // The set tone between the down and distance and the rest of the call
+    // prompt. The line before it is a few words, so half its estimate is a
+    // short beat; the tone itself is synthesised with a known length, so the
+    // next utterance is timed right off its end rather than off a guess.
+    function scheduleSetTone(said) {
+        cancelWhistle();
+        var mode = app.state.pacing === 'manual' ? 'medium' : app.state.pacing;
+        var wait = AF.ui.pauseFor(said, mode) * 0.5;
+        whistleTimer = root.setTimeout(function () {
+            whistleTimer = null;
+            var gen = ++whistleGen;
+            AF.dom.tone('set');
+            var toneMs = ((AF.dom.TONES && AF.dom.TONES.set && AF.dom.TONES.set.dur) || 0.15) * 1000;
+            whistleTimer = root.setTimeout(function () {
+                whistleTimer = null;
+                if (gen !== whistleGen) return;
+                if (uiIsOpen()) return;
+                proceed(speakSegment());
+            }, toneMs + 120);
+        }, Math.max(250, wait));
     }
 
     function cancelWhistle() {

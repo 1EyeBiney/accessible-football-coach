@@ -294,4 +294,19 @@ module.exports = function (t) {
     var rItems = U.dequeueSegment(rq);
     t.ok(rItems[0].report === true && rItems[1].report === false,
          'the report flag distinguishes football from interface chatter at speak time');
+
+    // Boundary kinds: the speaker reads which sound each gap owes, whistle
+    // by default, the set tone when asked, and nothing at the end.
+    var kq = U.makeQueue();
+    U.enqueue(kq, 'the result', 'result');
+    U.queueBoundary(kq);
+    U.enqueue(kq, 'the down and distance', 'result');
+    U.queueBoundary(kq, 'set');
+    U.enqueue(kq, 'the suggestion', 'result');
+    U.dequeueSegment(kq);
+    t.eq(U.lastBoundaryKind(kq), 'whistle', 'an unnamed boundary owes the whistle');
+    U.dequeueSegment(kq);
+    t.eq(U.lastBoundaryKind(kq), 'set', 'a set boundary owes the set tone');
+    U.dequeueSegment(kq);
+    t.eq(U.lastBoundaryKind(kq), null, 'the final segment owes nothing');
 };

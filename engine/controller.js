@@ -198,6 +198,15 @@
                us + ' ' + words(g.score[c.coach]) + ', ' + them + ' ' + words(g.score[1 - c.coach]) + '.';
     }
 
+    // Just the down, distance and spot, for the head of every call prompt.
+    // The full situationLine stays for Tab and for possession changes; this
+    // one is short on purpose, because it is heard on every snap.
+    function shortSituation(c) {
+        var g = c.game;
+        var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
+        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ' at ' + spotWords(g.ball) + '.';
+    }
+
     // What is on the field and what the defense is showing, front-loaded by
     // importance and leaving out anything at its default (DESIGN.md 21.8).
     function examine(c) {
@@ -741,7 +750,8 @@
 
     var api = { MODES: MODES, PLAY_CLOCK: PLAY_CLOCK,
                 newGame: newGame, pending: pending, drain: drain,
-                situationLine: situationLine, examine: examine, suggestion: suggestion,
+                situationLine: situationLine, shortSituation: shortSituation,
+                examine: examine, suggestion: suggestion,
                 offenseShows: offenseShows,
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,

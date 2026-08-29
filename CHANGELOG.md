@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1, August 28, 2026. Whistle timing, and the shape of the call prompt.
+
+From Brian's first listen: the whistle now fires at half the pacing estimate for the result instead of the whole of it, so at a fast screen reader rate it lands on the tail of the announcement rather than leaving a dead gap after it - impinging on purpose, at his request. P still scales it.
+
+Every call prompt now leads with the down and distance on its own, then a short synthesised set tone, then the rest: on defense the personnel the offense is showing, then the coordinator's suggestion. The tone is an oscillator, not a file, so its length is known exactly and the next utterance is timed right off its end. Boundaries in the announce queue now carry a kind (whistle or set) so the speaker knows which sound each gap owes.
+
+node test/run.js: 372 checks (was 367). Harness and matrix untouched. Verified in a real browser: result, whistle at the halved estimate, "second and four at our own thirty seven," set tone, then the suggestion, as three utterances.
+
 ## 0.4.0, August 28, 2026. The whistle, the seed key, and the defensive look.
 
 The referee whistle (ISSUES.md, from play). One of eight recorded whistles in audio/ref plays between a play's result and the next play's prompt, the ready-for-play whistle, so a coach listening by ear can tell where the last play ends and the next decision begins. The announce queue gained segments (ui/core.js): a boundary splits the result and the prompt into two utterances, priority sorting never crosses it, and main.js gates the second utterance on the whistle clip's ended event rather than a duration guess, because the game never knows when a screen reader finishes speaking but always knows when its own clip does. Clips are Audio elements created once at the Begin click and chosen by a grab bag from a clock-seeded cosmetic Rng that never touches the game's stream, so every seed replays exactly as before. The auto-advance timer whistles before each delegated snap the same way, and every whistle continuation is invalidated the moment the coach presses a key. The play clock now starts at the whistle. The three patterns come from the accessible golf project's audio engine, ported rather than copied.

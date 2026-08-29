@@ -43,8 +43,8 @@
     var GAME = [
         h('Calling a play'),
         l('Your coordinator suggests a formation and a play as soon as the last one is over. You do not have to ask.'),
-        l('A referee whistle marks the ball ready for play. Everything before the whistle belongs to the last play; everything after it, including the suggestion, belongs to the next one.'),
-        l('On defense, before your call, you hear what personnel the offense is showing, which is the same look your coordinator builds his call from.'),
+        l('A referee whistle marks the ball ready for play. Everything before the whistle belongs to the last play; everything after it belongs to the next one.'),
+        l('After the whistle you hear the down and distance, then a short tone, then the call. On defense the call starts with what personnel the offense is showing, which is the same look your coordinator builds his call from.'),
         l('Enter accepts what he suggested.'),
         l('F opens the formation list if you want something else. Pick a formation, then pick a play from the call sheet for this down and distance.'),
         l('N calls no huddle. It keeps the same personnel and denies the defense a clean substitution, but your players tire faster and you get less information.'),

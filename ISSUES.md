@@ -48,6 +48,8 @@ a specific desired effect genuinely can't be done that way.
 
 (Moved here by Claude Code with the commit that fixed it.)
 
+Whistle timing and the call prompt's shape (2026-08-28, from Brian's first listen). The whistle fires at half the pacing estimate so it lands on the announcement's tail instead of after a dead gap; every call prompt is now down and distance, a short synthesised set tone with an exactly known length, then the look and the suggestion. Commit: "Milestone 9a: whistle timing and the call prompt".
+
 The referee whistle (2026-08-28). One of the eight whistles in audio/ref plays between a play's result and the next play's prompt, marking the ball ready for play. Built on the three patterns from the accessible golf audio engine: Audio elements created once at the Begin click, a grab bag so no clip repeats until all eight have been heard, and the next utterance gated on the clip's ended event rather than a duration guess. The shuffle draws from its own clock-seeded Rng so the game's seed replays exactly as before. The announce queue gained segments (ui/core.js) so the result and the prompt are two utterances with the whistle in the gap, and the play clock now starts at the whistle, like real football. Commit: "Milestone 9: the whistle and the coach's ears".
 
 The seed on Shift Tab (2026-08-28). Tab stays the short situation line; Shift Tab speaks the seed as digits, for reporting anything noticed in play. Documented in help and the keyboard explorer. Same commit.
