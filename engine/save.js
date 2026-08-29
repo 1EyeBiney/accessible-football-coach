@@ -164,7 +164,7 @@
                 pending: c.pending, cued: c.cued, batched: c.batched,
                 log: c.log, halftimeDone: c.halftimeDone, over: c.over,
                 lastReport: c.lastReport, verbosity: c.verbosity,
-                hints: c.hints, pacing: c.pacing,
+                hints: c.hints, pacing: c.pacing, naming: c.naming,
                 secondHalfPlan: c.secondHalfPlan, snapId: c.snapId,
                 suggestCache: c.suggestCache, lastFormation: c.lastFormation,
                 lastOffFormation: c.lastOffFormation, lastOffTeam: c.lastOffTeam,
@@ -215,6 +215,7 @@
             log: cc.log, halftimeDone: cc.halftimeDone, over: cc.over,
             lastReport: cc.lastReport, verbosity: cc.verbosity,
             hints: cc.hints || 'on', pacing: cc.pacing || 'medium',
+            naming: cc.naming || 'both',
             secondHalfPlan: cc.secondHalfPlan, game: g, snapId: cc.snapId,
             suggestCache: cc.suggestCache, lastFormation: cc.lastFormation,
             lastOffFormation: cc.lastOffFormation, lastOffTeam: cc.lastOffTeam,
@@ -225,6 +226,9 @@
             forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null
         };
         g.controller = c;
+        // The engine reads the naming setting off the game when it resolves
+        // a snap, so the loaded game has to carry it as the live one did.
+        g.naming = c.naming;
         return c;
     }
 

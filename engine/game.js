@@ -161,16 +161,46 @@
         var onField = ['OL1', 'OL2', 'OL3', 'OL4', 'OL5'].concat(roles);
         var k;
         for (k in lu) { if (onField.indexOf(k) < 0) lu[k] = null; }
+        // What each man is called this snap, stamped where the slot is known
+        // so resolve.js can name him without carrying the lineup around
+        // (DESIGN.md 4.4).
+        //
+        // An offensive label is the job being done on this snap, not a name
+        // that belongs to a man for the game: these slots are real positions,
+        // and a back filling in while the starter rests really is the running
+        // back while he is out there. That is the opposite of the defensive
+        // rule below it, and deliberately so - a defensive alignment here is
+        // a convention over the depth chart, so it stays with the man, while
+        // an offensive one is a job, so it stays with the job.
+        for (k in lu) { if (lu[k] && P.SLOT_SAY[k]) lu[k].live.slot = P.SLOT_SAY[k]; }
         return lu;
     }
 
-    function defenseLineup(team, front, PL) {
+    // P (the players module) is optional: without it the lineup is built
+    // exactly as before but nobody is given a spoken position. Every caller
+    // inside a real game passes it; matrix.js and the unit tests build a
+    // lineup to resolve one snap and do not care what anyone is called.
+    function defenseLineup(team, front, PL, P) {
         var f = PL.FRONTS[front], d = team.roster.depth, byId = team.roster.byId;
         function take(pos, n) {
             var ids = d[pos].filter(function (id) { return !byId[id].live.out && !byId[id].live.benched; });
             if (ids.length < n) ids = d[pos].filter(function (id) { return !byId[id].live.out; });
             var out = ids.slice(0, n).map(function (id) { return byId[id]; });
             while (out.length < n) out.push(emergency(team, pos));   // never field a short unit
+            // A defensive label is the man's own place on the depth chart,
+            // not his place in the group that happens to be on the field,
+            // and the difference is the whole point. Indexing the filtered
+            // list renamed everybody behind a man the coordinator had rested
+            // for a series: a nose tackle became a left end and back again
+            // while the coach was trying to learn who he was. Depth is
+            // looked up on the full chart so a label stays with a man
+            // through benchings, front changes and injuries alike (found by
+            // the milestone review; DESIGN.md 4.4).
+            if (P) out.forEach(function (p) {
+                if (!p) return;
+                var at = d[pos].indexOf(p.id);
+                p.live.slot = P.defSlotSay(pos, at < 0 ? d[pos].length : at);
+            });
             return out;
         }
         return { DL: take('DL', f.dl), LB: take('LB', f.lb), DB: take('DB', f.db) };
@@ -461,8 +491,13 @@
         var ret = Math.round(clamp(rng.normal(5, 5), 0, 25));
         var ball = game.ball + dist; // yards from offense's own goal
         var text;
-        if (ball >= 100) { ball = 100 - RULES.HS.touchback; text = 'punt into the end zone, touchback'; }
-        else { ball = Math.max(1, ball - ret); text = 'punt of ' + dist + ' yards, returned ' + ret; }
+        if (ball >= 100) { ball = 100 - RULES.HS.touchback; text = 'punt into the end zone, touchback.'; }
+        else {
+            ball = Math.max(1, ball - ret);
+            // "Returned zero" is not something anybody says, and without the
+            // full stop the line ran straight into the situation after it.
+            text = 'punt of ' + dist + ' yards' + (ret ? ', returned ' + ret : ', no return') + '.';
+        }
         game.stats[offIdx].punts++;
         game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'punt', text: text });
         game.clock = Math.max(0, game.clock - 6);
@@ -481,7 +516,7 @@
         p = clamp(p, 0.02, 0.97);
         game.stats[offIdx].fga++;
         var good = rng.chance(p);
-        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg', text: dist + ' yard field goal ' + (good ? 'is good' : 'is no good') });
+        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg', text: dist + ' yard field goal ' + (good ? 'is good.' : 'is no good.') });
         game.clock = Math.max(0, game.clock - 5);
         if (good) { game.stats[offIdx].fgm++; score(game, offIdx, 3, deps); if (!game.ot) kickoff(game, offIdx, deps); }
         else setPossession(game, 1 - offIdx, Math.max(20, 100 - (game.ball - 7)));
@@ -496,7 +531,7 @@
             game.ball = 97; game.down = 1; game.dist = 3;
             var r = runPlay(game, offIdx, deps, true);
             var made = r && r.td;
-            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'two point try ' + (made ? 'is good' : 'fails') });
+            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'two point try ' + (made ? 'is good.' : 'fails.') });
             if (made) game.score[offIdx] += 2;
             game.ball = saved.ball; game.down = saved.down; game.dist = saved.dist;
             return;
@@ -504,7 +539,7 @@
         var K = kicker(game.teams[offIdx], 'K', P);
         var p = clamp(0.84 + ((K ? P.eff(K, 'kacc') : 40) - 45) * 0.005, 0.5, 0.99);
         var good = rng.chance(p);
-        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'extra point ' + (good ? 'is good' : 'is no good') });
+        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'extra point ' + (good ? 'is good.' : 'is no good.') });
         if (good) game.score[offIdx] += 1;
     }
 
@@ -740,9 +775,13 @@
         def.live.lastDefPersonnel = defPersonnel;
 
         var lu = offenseLineup(off, play.formation, P, PL);
-        var dl = defenseLineup(def, dc.front, PL);
+        var dl = defenseLineup(def, dc.front, PL, P);
         var ctx = { rng: rng, plays: PL, players: P, off: { lineup: lu }, def: { lineup: dl, misaligned: misaligned },
-                    play: play, call: dc, sit: sit, tempo: tempo };
+                    play: play, call: dc, sit: sit, tempo: tempo,
+                    // How a player is named in the event sentences: 'both'
+                    // (position and last name), 'position', or 'name'. The
+                    // controller sets it; headless play leaves it at both.
+                    naming: game.naming || 'both' };
         var res;
         if (twelveMen) {
             res = { type: 'penalty', outcome: 'penalty', yards: 0, clockRuns: false, events: [{ kind: 'penalty', say: 'twelve men on the field' }],
@@ -817,6 +856,18 @@
 
         // Stamina and injuries
         var onOff = onFieldList(lu), onDef = onFieldList(dl);
+
+        // What everyone on this snap was called, kept on the result so the
+        // line can be said again later without lying. live.slot is where a
+        // man stands now, and a line describing a snap from ten plays ago
+        // must not borrow it: re-rendering the log at the final whistle
+        // moved a fifth of its blocks to the wrong linemen (found by the
+        // milestone review). Captured before injuries rebuild the chart.
+        res.slotOf = {};
+        onOff.concat(onDef).forEach(function (p) {
+            if (p && p.live && p.live.slot) res.slotOf[p.id] = p.live.slot;
+        });
+
         applyStamina(off, onOff, res.carrier, tempo);
         applyStamina(def, onDef, null, tempo);
         var injuries = [];
@@ -832,7 +883,7 @@
         observeSnap(game, offIdx, res, deps, onOff, onDef);
 
         // Apply the result to the field
-        var described = describeBoth(res, PL, { off: offIdx, coach: coachIdxOf(game) });
+        var described = describeBoth(res, PL, { off: offIdx, coach: coachIdxOf(game), players: P, naming: game.naming || 'both' });
         var text = described.full;
         var td = false, turnover = false, safety = false;
         if (isTwoPoint) {
@@ -870,8 +921,16 @@
         var trailingLate = game.score[defIdx] < game.score[offIdx] && game.quarter >= 4 && game.clock <= 150;
         if (res.clockRuns && trailingLate && game.timeouts[defIdx] > 0 && !td) {
             game.timeouts[defIdx]--; secs = 5;
-            text += ', timeout ' + game.teams[defIdx].name;
-            described.terse += ', timeout ' + game.teams[defIdx].name;
+            // On the result, not only on the two strings: the controller
+            // rebuilds a line from the result to apply the naming and
+            // verbosity settings in force now, and a clause that lives only
+            // in the stored text is a clause it cannot know about. This one
+            // was going silent about twice a game - the coach was never told
+            // his opponent had stopped the clock (found by the milestone
+            // review).
+            res.timeoutBy = game.teams[defIdx].name;
+            text += ', timeout ' + res.timeoutBy;
+            described.terse += ', timeout ' + res.timeoutBy;
         }
         if (!game.ot) game.clock = Math.max(0, game.clock - secs);
         game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'play',
@@ -879,21 +938,21 @@
         game.drivePlays++;
 
         if (td) {
-            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'td', text: 'Touchdown ' + game.teams[offIdx].name });
+            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'td', text: 'Touchdown ' + game.teams[offIdx].name + '.' });
             score(game, offIdx, 6, deps); tryPAT(game, offIdx, deps);
             if (!game.ot) kickoff(game, offIdx, deps);
         } else if (safety) {
             game.log.push({ q: game.quarter, clock: game.clock, team: defIdx, kind: 'safety',
-                            text: 'Safety, two points for ' + game.teams[defIdx].name });
+                            text: 'Safety, two points for ' + game.teams[defIdx].name + '.' });
             game.score[defIdx] += 2;
             // The team that gave up the safety free kicks from its own twenty.
             var fk = Math.round(clamp(game.rng.normal(45, 7), 25, 60));
             game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'freekick',
-                            text: 'free kick of ' + fk + ' yards after the safety' });
+                            text: 'free kick of ' + fk + ' yards after the safety.' });
             game.clock = Math.max(0, game.clock - 6);
             setPossession(game, defIdx, clamp(fk - 5, 15, 60));
         } else if (!turnover && game.down > 4) {
-            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'downs', text: 'Turnover on downs' });
+            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'downs', text: 'Turnover on downs.' });
             setPossession(game, defIdx, 100 - game.ball);
         }
         res.td = td; res.turnover = turnover;
@@ -906,12 +965,13 @@
     function describeBoth(res, PL, opts) {
         var full = describe(res, PL, opts);
         var head = downLine(res, opts) + ': ';
+        var timeout = res.timeoutBy ? ', timeout ' + res.timeoutBy : '';
         var body = full.slice(head.length);
         var callEnd = body.indexOf('. ');
         var terseBody = callEnd >= 0 ? body.slice(callEnd + 2) : body;
         var evStart = terseBody.lastIndexOf(' (');
         if (evStart > 0 && /\)$/.test(terseBody)) terseBody = terseBody.slice(0, evStart);
-        return { full: full, terse: head + terseBody };
+        return { full: full + timeout, terse: head + terseBody + timeout };
     }
 
     function downLine(res, opts) {
@@ -922,20 +982,40 @@
     }
 
     function describe(res, PL, opts) {
+        opts = opts || {};
         var c = PL.CONCEPTS[res.concept], f = PL.FORMATIONS[res.formation];
+        // Who a player is to the coach: position and last name by default
+        // (DESIGN.md 4, status note). P is optional so a caller with no
+        // players module still gets the plain name it always got.
+        var nm = function (p) {
+            return opts.players ? opts.players.sayPlayer(p, opts.naming, res.slotOf) : (p ? p.name : '');
+        };
+        // A position label starts a sentence in lower case where a name did
+        // not, so the one place a player opens a clause capitalises him.
+        var cap = function (t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
         var head = downLine(res, opts) + ': ';
         var call = c.name + ' from ' + f.name + ' against ' + PL.COVERAGES[res.call.coverage].name + ', ' + PL.PRESSURES[res.call.pressure].say + (res.call.adjustment !== 'NONE' ? ', ' + PL.ADJUSTMENTS[res.call.adjustment].say : '') + '. ';
         var body;
         if (res.penalty && res.penalty.preSnap) body = 'Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards.';
         else if (res.outcome === 'sack') body = 'Sack for a loss of ' + (-res.yards) + '.';
-        else if (res.outcome === 'interception') body = 'Intercepted' + (res.defender ? ' by ' + res.defender.name : '') + '.';
-        else if (res.outcome === 'complete') body = 'Complete to ' + res.target.name + ' for ' + res.yards + (res.yac > 8 ? ', most of it after the catch' : '') + '.';
+        else if (res.outcome === 'interception') body = 'Intercepted' + (res.defender ? ' by ' + nm(res.defender) : '') + '.';
+        else if (res.outcome === 'complete') body = 'Complete to ' + nm(res.target) + ' for ' + res.yards + (res.yac > 8 ? ', most of it after the catch' : '') + '.';
         else if (res.outcome === 'incomplete') body = res.bust ? 'Incomplete, a busted play.' : (res.drop ? 'Dropped.' : (res.breakup ? 'Incomplete, broken up.' : 'Incomplete.'));
         else if (res.outcome === 'throwaway') body = 'Thrown away.';
         else if (res.outcome === 'scramble') body = 'Scramble for ' + res.yards + '.';
         else if (res.kneel) body = 'Kneel.';
-        else body = (res.carrier ? res.carrier.name : 'Run') + ' for ' + (res.yards < 0 ? 'a loss of ' + (-res.yards) : res.yards) + (res.broke ? ', broke a tackle' : '') + '.';
-        var ev = res.events && res.events.length ? ' (' + res.events.map(function (e) { return e.say; }).join('; ') + ')' : '';
+        else body = (res.carrier ? cap(nm(res.carrier)) : 'Run') + ' for ' + (res.yards < 0 ? 'a loss of ' + (-res.yards) : res.yards) + (res.broke ? ', broke a tackle' : '') + '.';
+        // An event that named players kept the shape it was written in, so
+        // the matchups in this line are said in the naming mode in force
+        // now rather than the one in force when the snap resolved. Without
+        // this, pressing A re-read the body of a line already in the log
+        // but not its tail, which is worse than not re-reading it at all.
+        var ev = res.events && res.events.length ? ' (' + res.events.map(function (e) {
+            if (e.tmpl && e.refs && opts.players) {
+                return opts.players.fillTemplate(e.tmpl, e.refs.map(nm));
+            }
+            return e.say;
+        }).join('; ') + ')' : '';
         if (res.fumble) body += ' Fumble, ' + (res.fumbleLost ? 'lost' : 'recovered') + '.';
         if (res.penalty && !res.penalty.preSnap) {
             body += ' Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards' +
@@ -987,7 +1067,7 @@
             // which is exactly what the old startGame draw meant.
             game.receivedFirst = flip ? 0 : 1;
             game.log.push({ q: 1, clock: game.clock, kind: 'toss',
-                            text: game.teams[game.receivedFirst].name + ' win the toss and will receive' });
+                            text: game.teams[game.receivedFirst].name + ' win the toss and will receive.' });
             kickoff(game, 1 - game.receivedFirst, deps);
             return null;
         }
@@ -996,7 +1076,7 @@
         if (call.call === coin) {
             game.pendingTossChoice = { winner: team, coin: coin };
             game.log.push({ q: 1, clock: game.clock, kind: 'toss',
-                            text: 'The coin comes up ' + coin + '. ' + game.teams[team].name + ' win the toss' });
+                            text: 'The coin comes up ' + coin + '. ' + game.teams[team].name + ' win the toss.' });
             return null;
         }
         // The other captain takes the ball, which is what a computer winner
@@ -1004,7 +1084,7 @@
         game.receivedFirst = 1 - team;
         game.log.push({ q: 1, clock: game.clock, kind: 'toss',
                         text: 'The coin comes up ' + coin + '. ' + game.teams[1 - team].name +
-                              ' win the toss and will receive' });
+                              ' win the toss and will receive.' });
         kickoff(game, team, deps);
         return null;
     }
@@ -1017,7 +1097,7 @@
         if (pick.choice === 'RECEIVE') {
             game.receivedFirst = team;
             game.log.push({ q: 1, clock: game.clock, kind: 'toss',
-                            text: game.teams[team].name + ' will receive' });
+                            text: game.teams[team].name + ' will receive.' });
         } else {
             // DEFER and KICK land in the same place for the opening: the
             // other side takes the ball now. Deferring banks the choice for
@@ -1093,7 +1173,7 @@
         // was being printed as a game clock, so the play by play read "one
         // hundred and sixty six minutes" and counted down from there.
         game.clock = 0;
-        game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period one' });
+        game.log.push({ q: game.quarter, clock: 0, kind: 'ot', text: 'Overtime period one.' });
         setPossession(game, game.otFirst, 90);
     }
 
@@ -1116,7 +1196,7 @@
         game.quarter = 4 + game.otRound;
         game.clock = 0;
         game.log.push({ q: game.quarter, clock: 0, kind: 'ot',
-                        text: 'Overtime period ' + (OT_WORD[game.otRound] || game.otRound) });
+                        text: 'Overtime period ' + (OT_WORD[game.otRound] || game.otRound) + '.' });
         setPossession(game, game.otFirst, 90);
         return res;
     }

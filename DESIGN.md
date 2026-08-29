@@ -102,6 +102,18 @@ Decided: the coach never needs raw numbers to make a decision. Matchup advice co
 
 Open question: when a scouting report reveals a player's attributes, do we show numbers, letter grades, or words? Options are the raw number (70), a letter grade (B), or a word (good). My lean is a word on the short report and the number available on the detailed player card for anyone who wants it. The word scale would be something like: poor, below average, average, good, very good, elite. This keeps the game readable in one line per player while not hiding the number from someone who wants to dig.
 
+### 4.4 How a player is named out loud (status, 2026-08-29)
+
+Status note, not a new decision: this records what was built from Brian's play notes and what it rests on.
+
+Every player has a spoken position label, and the play-by-play names him by position and last name by default: "nose tackle Webb beat right guard Jones". A key cycles that to position only or name only. The reason position leads is that a bare name is the one thing a coach who cannot see the field has nothing to anchor - there is no jersey number, no camera, and no way to look a name up mid-drive - so the first mention of a man has to carry its own meaning. This is the same voice section 5.3 already writes into its own examples, where a coordinator says "our X can beat their right corner"; the play-by-play simply did not have it.
+
+What the labels rest on. The engine models position groups (4.2), not alignment: the offensive line is filled from the depth chart into five slots, and the defensive lineup takes the top few of each group. The labels are therefore an authored convention over the lineup slot, with the same standing as the scheme matrix - football knowledge written down rather than derived.
+
+The offensive convention is not arbitrary. The run concepts already pair inside runs to the second, third and fourth line slots and off-tackle runs to the fourth and fifth, which is the interior three and then one edge, so reading the five slots as left tackle through right tackle matches how the engine already uses them. The secondary is the same: coverage already sends the X receiver's route to the first defensive back and the Z's to the second, so corner, corner, safety, safety, nickel, dime falls out of code that was already written.
+
+The defensive front is the weak case and is worth stating plainly. Those players are taken in depth order and then re-sorted by attribute on every snap, so a label is a convention rather than where a man lines up. Labels are assigned by depth and not by how many of the group are on the field, which was a deliberate second pass: keying them to the count read better on paper, since a three-man front really does have a nose tackle where a four-man front has two tackles, but it meant the same player was a sam linebacker on one snap and a mike on the next purely because the defense changed personnel around him. A label whose whole job is to let a coach learn who his players are has to stay put. A starter going down promotes the next man into his label, which is right: he is the nose tackle now.
+
 ## 5. Your staff (Decided in outline)
 
 The staff is the heart of the design. Your assistants are the ones who read the field, and their judgment is only as good as they are.

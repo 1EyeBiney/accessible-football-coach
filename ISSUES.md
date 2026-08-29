@@ -15,11 +15,17 @@ An item marked "before next build" is fixed before any new feature work starts. 
 
 ## Not started
 
+Special teams name nobody. Kickoffs, punts, field goals and extra points speak no player at all, in any naming mode, so a coach never learns who his kicker, his punter or his returner is - the one group of players he has no other way to meet. The position labels and the naming modes are all in place; the kicking game simply was not wired into them. Found by the session 5 milestone review.
+
 Defend-an-end at the toss. The real toss offers a winner the choice of which goal to defend; the engine has no wind, weather, or field direction for that choice to mean anything yet, so it is deliberately not offered (a choice that changes nothing would be dishonest). If an elements model ever arrives, the toss flow has the natural slot for it.
 
 The OC shell-read clause: at full verbosity on offense, when the offensive coordinator has a confident read of the defensive shell, one short clause in the suggestion line about what they are showing, filtered through his belief store so a bad staff can be wrong about it (DESIGN.md 24.1). Deliberately deferred from the 2026-08-28 reported-information pass to keep it conservative; the T key already gives tendencies on demand.
 
+The defense seeing the offense's personnel and answering it with a substitution, which is the design question from Brian's own play note. Written up in full as DESIGN_PROPOSALS.md proposal 5: the football reasoning, the three things it costs, and why it belongs in the same pass as the stale-personnel item below rather than on its own.
+
 ## Tuning
+
+The offensive line slides a position when one man is rested. offenseLineup fills its five slots from whoever is available rather than substituting into a specific slot, so benching the left tackle makes the left guard the left tackle, the center the left guard, and so on down the line. Real teams put a backup tackle at tackle. The position labels made this audible rather than causing it - eleven offensive players a game are called more than one thing, against 0.12 on defense where labels follow the depth chart - but fixing it changes which lineman blocks which defender and therefore the harness, so it wants a deliberate engine pass with the numbers run before and after. Found by the session 5 milestone review.
 
 Z says there is no look at their offense yet on the first snap of every new drive, even in the fourth quarter against a team you have watched all night. The guard behind it is right and deliberate: the stamps are per-possession, so Z can never report your own unit as theirs, which is the correctness rule of DESIGN.md 24.1. But your memory is not per-possession. The improvement is to report the last time you actually faced that unit, worded so it does not claim to be last snap ("the last time they had the ball" rather than "last snap"), which needs a small decision about how stale information should be presented before it is built. Found by the session 5 audit.
 
@@ -45,6 +51,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+How players are named in the play by play (2026-08-29, from conversation). Every player now has a spoken position, and the play by play says the position and the last name: "nose tackle Webb beat right guard Jones" where it used to say "Marcus Webb beat Terrell Jones". A cycles that to position only or name only, and says the last play again in whatever setting you just chose so you can hear the difference; name only gives the whole name, because fifty surnames are shared across the eighty men who dress and the last name alone produced "Fletcher beat Fletcher" about twice a game. On defense a position stays with a man all game, so it is something to learn him by; on offense it is the job on the field, so a back filling in while your starter rests really is called the running back while he is out there. The substitution list and your coordinators now speak the same vocabulary, from one table, rather than three. Also fixed in the same pass: the situation line said "three quarter" instead of "third quarter" in every game ever played, and six more log lines were running into the next sentence for want of a full stop, the touchdown into the extra point most often. Commit: "Milestone 12: how players are named".
 
 The ball position said "our own" when it meant theirs (2026-08-29, from play). Where the ball is was resolved against the offense, not against you, so on defense every spot was spoken with the offense's possessives: after a kickoff and a short return you heard "ball on our own 25" for a ball on their 25. It is now resolved against who owns the half the ball is in compared to your own team, so it is right on both sides of the ball, and the engine's own formatter says it the same way the situation line does - you were hearing one spot named two ways inside a single utterance, "at their twenty four" and then "at opponent twenty four". A game nobody is coaching keeps the old offense-relative wording, so the harness is byte for byte unchanged. Also fixed in passing: "kickoff returned to the our own thirty eight", and the kickoff lines now end in a full stop instead of running into the next sentence. Commit: "Milestone 11: the listening pass".
 

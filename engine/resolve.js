@@ -31,6 +31,26 @@
 
     function dbSlot(lineup, i) { return lineup.DB[i] || lineup.DB[lineup.DB.length - 1]; }
 
+    // The one place an event sentence names a player. Position and last name
+    // by default, because a bare name is the one thing a blind coach cannot
+    // anchor: there is no jersey number and no replay to hang it on
+    // (ISSUES.md, from play; DESIGN.md 4, status note).
+    function who(ctx, p) { return ctx.players.sayPlayer(p, ctx.naming); }
+
+    // An event that names players keeps the shape it was written in and the
+    // men it names, alongside the sentence itself. The sentence is what
+    // almost everything reads; the shape is what lets engine/game.js say the
+    // line again if the coach changes how players are announced, so pressing
+    // A re-reads the matchups in a line already in the log and not only its
+    // body. refs are player objects, which engine/save.js already knows how
+    // to write without duplicating them.
+    function named(ctx, ev, tmpl, refs) {
+        ev.tmpl = tmpl;
+        ev.refs = refs;
+        ev.say = ctx.players.fillTemplate(tmpl, refs.map(function (p) { return who(ctx, p); }));
+        return ev;
+    }
+
     function bestBy(players, key, eff) {
         var best = null, bv = -1, i, v;
         for (i = 0; i < players.length; i++) { v = eff(players[i], key); if (v > bv) { bv = v; best = players[i]; } }
@@ -117,8 +137,9 @@
         var pressured = ttp < ttt;
         var margin = pressured ? (ttt - ttp) : 0;
         if (pressured && worst) {
-            events.push({ kind: 'pressure', rusher: worst.rusher, blocker: worst.blocker, unblocked: !worst.blocker,
-                          say: (worst.blocker ? worst.rusher.name + ' beat ' + worst.blocker.name : worst.rusher.name + ' came free') });
+            events.push(named(ctx, { kind: 'pressure', rusher: worst.rusher, blocker: worst.blocker, unblocked: !worst.blocker },
+                              worst.blocker ? '$1 beat $2' : '$1 came free',
+                              worst.blocker ? [worst.rusher, worst.blocker] : [worst.rusher]));
         } else if (edge > 8) {
             events.push({ kind: 'protection', say: 'clean pocket' });
         }
@@ -172,7 +193,8 @@
                 res.yards = -Math.round(rng.uniform(3, 9));
                 res.tackler = pp.worst ? pp.worst.rusher : null;
                 res.clockRuns = true;
-                events.push({ kind: 'sack', by: res.tackler, say: 'sacked' + (res.tackler ? ' by ' + res.tackler.name : '') });
+                events.push(res.tackler ? named(ctx, { kind: 'sack', by: res.tackler }, 'sacked by $1', [res.tackler])
+                                            : { kind: 'sack', by: null, say: 'sacked' });
                 // strip sack
                 if (rng.chance(0.09 - (eff(qb, 'awr') - 45) * 0.001)) { res.fumble = true; }
                 return res;
@@ -185,7 +207,7 @@
                 res.yards = Math.round(2 + (eff(qb, 'spd') - 45) * 0.12 + rng.normal(0, 4));
                 res.carrier = qb; res.tackler = chaser; res.clockRuns = true;
                 res.oob = rng.chance(0.3);
-                events.push({ kind: 'scramble', say: qb.name + ' escaped the pocket' });
+                events.push(named(ctx, { kind: 'scramble', by: qb }, '$1 escaped the pocket', [qb]));
                 return res;
             }
         }
@@ -275,8 +297,8 @@
             events.push({ kind: 'throwaway', say: 'threw it away' });
             return res;
         }
-        events.push({ kind: 'target', role: choice.role, rcv: choice.rcv, dfd: choice.dfd, sep: choice.sep, edge: choice.edge, help: choice.help, bad: bad,
-                      say: choice.rcv.name + ' against ' + choice.dfd.name + (choice.help < 0 ? ' with help' : '') });
+        events.push(named(ctx, { kind: 'target', role: choice.role, rcv: choice.rcv, dfd: choice.dfd, sep: choice.sep, edge: choice.edge, help: choice.help, bad: bad },
+                          '$1 against $2' + (choice.help < 0 ? ' with help' : ''), [choice.rcv, choice.dfd]));
         res.target = choice.rcv; res.defender = choice.dfd; res.role = choice.role;
 
         // Throw
@@ -291,7 +313,7 @@
             var pDrop = clamp(0.06 - (eff(choice.rcv, 'hnd') - 45) * 0.0012, 0.01, 0.15);
             if (rng.chance(pDrop)) {
                 res.outcome = 'incomplete'; res.yards = 0; res.clockRuns = false; res.drop = true;
-                events.push({ kind: 'drop', say: choice.rcv.name + ' dropped it' });
+                events.push(named(ctx, { kind: 'drop', by: choice.rcv }, '$1 dropped it', [choice.rcv]));
                 return res;
             }
             // Run after catch
@@ -313,7 +335,7 @@
                          (cov.deep === 0 ? 0.16 : cov.deep === 1 ? 0.06 : 0);
             if (rng.chance(clamp(pBreak, 0.005, 0.25))) {
                 yac += rng.uniform(15, 40);
-                events.push({ kind: 'breakaway', by: choice.rcv, say: choice.rcv.name + ' broke free' });
+                events.push(named(ctx, { kind: 'breakaway', by: choice.rcv }, '$1 broke free', [choice.rcv]));
             }
             res.outcome = 'complete';
             res.air = air; res.yac = Math.round(yac);
@@ -331,12 +353,12 @@
             res.outcome = 'interception'; res.yards = air; res.clockRuns = false;
             res.defender = choice.dfd;
             res.retYards = Math.round(Math.max(0, rng.normal(6, 8)));
-            events.push({ kind: 'interception', by: choice.dfd, say: 'intercepted by ' + choice.dfd.name + (bad ? ', a bad decision' : '') });
+            events.push(named(ctx, { kind: 'interception', by: choice.dfd }, 'intercepted by $1' + (bad ? ', a bad decision' : ''), [choice.dfd]));
             return res;
         }
         var pBu = clamp(0.25 + (eff(choice.dfd, 'bsk') - 45) * 0.004, 0.05, 0.6);
         res.outcome = 'incomplete'; res.yards = 0; res.clockRuns = false;
-        if (rng.chance(pBu)) { res.breakup = true; events.push({ kind: 'breakup', by: choice.dfd, say: 'broken up by ' + choice.dfd.name }); }
+        if (rng.chance(pBu)) { res.breakup = true; events.push(named(ctx, { kind: 'breakup', by: choice.dfd }, 'broken up by $1', [choice.dfd])); }
         else if (hurried) events.push({ kind: 'hurried', say: 'hurried throw, off target' });
         // Pass interference on deep man coverage
         if (!cov.man && depth !== 'deep') return res;
@@ -402,8 +424,8 @@
         edge -= readPen;
         edge += rng.normal(0, 5);
 
-        if (worst && we < -8) events.push({ kind: 'blockLost', blocker: worst.b, defender: worst.d, say: worst.d.name + ' beat ' + worst.b.name });
-        if (best && be > 8) events.push({ kind: 'blockWon', blocker: best.b, defender: best.d, say: best.b.name + ' opened a hole' });
+        if (worst && we < -8) events.push(named(ctx, { kind: 'blockLost', blocker: worst.b, defender: worst.d }, '$1 beat $2', [worst.d, worst.b]));
+        if (best && be > 8) events.push(named(ctx, { kind: 'blockWon', blocker: best.b, defender: best.d }, '$1 opened a hole', [best.b]));
 
         if (concept.qbRun) {
             res.outcome = 'run'; res.yards = Math.round(clamp(1 + edge * 0.05 + rng.normal(0.4, 0.9), -1, 4));
@@ -431,14 +453,14 @@
             if (rng.chance(pBreak)) {
                 broke = true;
                 yacon += 3 + rng.normal(0, 3);
-                events.push({ kind: 'brokeTackle', by: carrier, say: carrier.name + ' broke a tackle' });
+                events.push(named(ctx, { kind: 'brokeTackle', by: carrier }, '$1 broke a tackle', [carrier]));
                 var safety = dl.DB[3] || dl.DB[2] || dl.DB[0];
                 var pBreakaway = clamp(0.05 + (eff(carrier, 'spd') - eff(safety, 'spd')) * 0.005 +
                                        (cov.deep === 0 ? 0.20 : cov.deep === 1 ? 0.07 : 0), 0.01, 0.45);
                 res.tackler = safety;
                 if (rng.chance(pBreakaway)) {
                     yacon += rng.uniform(12, 45);
-                    events.push({ kind: 'breakaway', by: carrier, say: carrier.name + ' is gone' });
+                    events.push(named(ctx, { kind: 'breakaway', by: carrier }, '$1 is gone', [carrier]));
                 }
             }
             yards = ybc + Math.max(0, yacon);

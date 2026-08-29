@@ -104,6 +104,11 @@
             // coach still learning gets told what a concept beats. Different
             // questions, so they are different settings (ISSUES.md, from play).
             hints: opts.hints || 'on',
+            // How a player is named in the play by play: 'both' (position
+            // and last name), 'position', or 'name'. A bare name is the one
+            // thing a blind coach cannot anchor, so position and name is the
+            // default (ISSUES.md, from play).
+            naming: opts.naming || 'both',
             // Pacing lives on the interface, but a preference only survives a
             // save if the controller carries it, because the controller is
             // what engine/save.js writes. It was the one setting without a
@@ -113,6 +118,7 @@
         };
         c.game = deps.game.startGame(deps, opts.home, opts.away, opts.seed);
         c.game.controller = c;
+        c.game.naming = c.naming;
         // The coach answers his own substitution questions rather than having
         // the automatic coach answer them for him (DESIGN.md 18.3).
         c.game.teams[c.coach].autoCoach = false;
@@ -236,6 +242,27 @@
 
     function pending(c) { return c.pending; }
 
+    // One line of the play by play, in the settings in force right now.
+    //
+    // The engine writes both a full and a terse form at snap time and the
+    // verbosity setting picks between them at read time, so V takes effect
+    // on the next line spoken rather than on the next snap. Naming has three
+    // settings rather than two, and storing six renderings of every line to
+    // get the same behaviour would be silly, so a line that still carries
+    // its result is rebuilt from that result instead. Entries with no result
+    // - kickoffs, free kicks, turnovers on downs, and anything loaded from a
+    // save old enough not to have kept one - fall back to what was stored.
+    function renderEntry(c, entry) {
+        if (entry.res && entry.res.concept && c.deps.game.describeBoth) {
+            var both = c.deps.game.describeBoth(entry.res, c.deps.plays, {
+                off: entry.team, coach: c.coach,
+                players: c.deps.players, naming: c.naming
+            });
+            return (c.verbosity === 'terse' && both.terse) ? both.terse : both.full;
+        }
+        return (c.verbosity === 'terse' && entry.terse) ? entry.terse : entry.text;
+    }
+
     // ---------- the lines the interface speaks ----------
 
     function situationLine(c) {
@@ -244,7 +271,10 @@
         // Only call it overtime when it actually is overtime. The quarter
         // counter runs past four at the end of regulation whether the game is
         // tied or not.
-        var qtr = g.ot ? 'overtime' : (words(Math.min(4, g.quarter)) + ' quarter');
+        // A quarter takes an ordinal, not a count: this said "three quarter,
+        // twelve minutes" in every situation line in the game (found by the
+        // milestone review). ORDINAL is the same table the down uses.
+        var qtr = g.ot ? 'overtime' : (ORDINAL[Math.min(4, g.quarter)] + ' quarter');
         var scorePart = qtr + ', ' + clockWords(g.clock) + '. ' +
                us + ' ' + words(g.score[c.coach]) + ', ' + them + ' ' + words(g.score[1 - c.coach]) + '.';
         // Between plays of the ordinary kind, down and distance are real.
@@ -432,13 +462,18 @@
         var g = c.game, team = g.teams[c.coach];
         var lu = offenseIsCoach(c)
             ? c.deps.game.offenseLineup(team, formation || c.lastFormation || 'SPREAD', c.deps.players, c.deps.plays)
-            : c.deps.game.defenseLineup(team, c.lastDefFront || 'NICKEL', c.deps.plays);
+            : c.deps.game.defenseLineup(team, c.lastDefFront || 'NICKEL', c.deps.plays, c.deps.players);
         var on = c.deps.game.onFieldList(lu), out = [], i, p, next;
         for (i = 0; i < on.length; i++) {
             p = on[i];
             next = nextOnChart(team.roster, p);
+            // The substitution list is the one place a coach maps a name to a
+            // position, so it has to speak the same vocabulary the play by
+            // play does. It used to say the raw group code, which a screen
+            // reader reads out as the letters D and L (found by the
+            // milestone review).
             out.push({ player: p, replacement: next,
-                       text: p.pos + ' ' + p.name + ', ' + staminaWord(p) +
+                       text: c.deps.players.sayPlayer(p, 'both') + ', ' + staminaWord(p) +
                              (next ? '. Next man, ' + next.name + '.' : '. No one behind him.') });
         }
         return out;
@@ -812,7 +847,7 @@
         var spoken = [], li, entry, lineText;
         for (li = logBefore; li < g.log.length; li++) {
             entry = g.log[li];
-            lineText = (c.verbosity === 'terse' && entry.terse) ? entry.terse : entry.text;
+            lineText = renderEntry(c, entry);
             if (!lineText) continue;
             c.log.push(lineText);
             spoken.push(lineText);
@@ -971,6 +1006,29 @@
         return c.verbosity;
     }
 
+    var NAMING = ['both', 'position', 'name'];
+
+    function setNaming(c, mode) {
+        c.naming = NAMING.indexOf(mode) >= 0 ? mode : 'both';
+        // The engine reads it off the game when it resolves a snap.
+        if (c.game) c.game.naming = c.naming;
+        return c.naming;
+    }
+
+    // The last snap, said again in whatever settings are in force now. This
+    // is what the rebuildable event sentences are for: changing how players
+    // are announced and then hearing the setting named back at you tells you
+    // nothing about what it sounds like (found by the milestone review).
+    // Null when no snap has happened yet, so the caller can stay quiet.
+    function lastPlayLine(c) {
+        var g = c.game, i;
+        if (!g || !g.log) return null;
+        for (i = g.log.length - 1; i >= 0; i--) {
+            if (g.log[i].kind === 'play') return renderEntry(c, g.log[i]);
+        }
+        return null;
+    }
+
     function setHints(c, on) {
         c.hints = on === 'off' ? 'off' : 'on';
         return c.hints;
@@ -996,7 +1054,7 @@
                 newGame: newGame, pending: pending, drain: drain,
                 situationLine: situationLine, shortSituation: shortSituation,
                 examine: examine, suggestion: suggestion,
-                offenseShows: offenseShows, opponentUnit: opponentUnit,
+                offenseShows: offenseShows, opponentUnit: opponentUnit, renderEntry: renderEntry,
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
@@ -1008,7 +1066,8 @@
                 matchups: matchups, tendencies: tendencies, postgameReview: postgameReview,
                 playClockSeconds: playClockSeconds, delayOfGame: delayOfGame,
                 setMode: setMode, setReportThreshold: setReportThreshold,
-                setVerbosity: setVerbosity, setHints: setHints, setPacing: setPacing, final: final,
+                setVerbosity: setVerbosity, setHints: setHints, setPacing: setPacing,
+                setNaming: setNaming, NAMING: NAMING, lastPlayLine: lastPlayLine, final: final,
                 words: words, clockWords: clockWords, spotWords: spotWords, staminaWord: staminaWord };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

@@ -341,7 +341,7 @@
     function newState(mode) {
         return { mode: mode || 'boot', confirm: null, explore: false, help: null,
                  viewer: null, pacing: 'medium', verbosity: 'full', hints: 'on',
-                 lastReport: '', lastContext: '',
+                 naming: 'both', lastReport: '', lastContext: '',
                  // True while the native file picker or save dialog is open. No
                  // real keydown reaches the page while it has focus, but the
                  // pacing timer and the play clock are our own code and would
@@ -443,6 +443,23 @@
         return 'Play hints ' + state.hints + '.';
     }
 
+    // How a player is named in the play by play. Position and last name is
+    // the default because a bare name is the one thing a coach who cannot
+    // see the field has nothing to anchor (ISSUES.md, from play). The other
+    // two are for a coach who knows his roster, or who never will.
+    var NAMING_ORDER = ['both', 'position', 'name'];
+    var NAMING_SAY = {
+        both: 'position and name',
+        position: 'position only',
+        name: 'name only'
+    };
+
+    function cycleNaming(state) {
+        var i = NAMING_ORDER.indexOf(state.naming);
+        state.naming = NAMING_ORDER[(i + 1) % NAMING_ORDER.length];
+        return 'Announce players by ' + NAMING_SAY[state.naming] + '.';
+    }
+
     var api = {
         sanitize: sanitize, numberWords: numberWords,
         makeQueue: makeQueue, enqueue: enqueue, dequeue: dequeue, queueClear: queueClear,
@@ -459,7 +476,8 @@
         FALLS_THROUGH: FALLS_THROUGH, layerActive: layerActive,
         askConfirm: askConfirm, resolveConfirm: resolveConfirm,
         makeHelp: makeHelp, helpAnnounce: helpAnnounce, helpMove: helpMove, helpHeading: helpHeading,
-        cyclePacing: cyclePacing, cycleVerbosity: cycleVerbosity, cycleHints: cycleHints
+        cyclePacing: cyclePacing, cycleVerbosity: cycleVerbosity, cycleHints: cycleHints,
+        cycleNaming: cycleNaming, NAMING_ORDER: NAMING_ORDER, NAMING_SAY: NAMING_SAY
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

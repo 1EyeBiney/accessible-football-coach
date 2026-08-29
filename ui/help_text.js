@@ -28,6 +28,8 @@
         l('P changes the pacing between fast, medium, slow and manual. On manual, the game waits for the spacebar before anything happens on its own.'),
         l('V switches between full and terse. Terse gives you one line a play.'),
         l('I turns the play hints on and off. A hint is the short note your coordinator adds about what a concept beats and what it loses to. It is separate from V, so you can keep the full play by play and still stop being taught the playbook you already know.'),
+        l('A sets how players are announced, cycling position and name, position only, and name only. Position and name is the default, so you hear "nose tackle Webb beat right guard Jones". Position only drops the names, for when every name in the league is noise. Name only gives the whole name and no position, for when you know your own roster cold. Pressing A also says the last play again in the setting you just chose, so you can hear the difference.'),
+        l('A word on what the positions mean. On defense a position stays with a man all game, so it is something to learn him by, even though where he lines up is a convention rather than a real alignment. On offense it is the job on the field, so a back filling in while your starter gets his legs back really is called the running back while he is out there.'),
         l('Escape goes back one step and tells you where you have ended up.'),
         l('Q quits. You will be asked to confirm.'),
         l('Five keys belong to the browser and not to the game: F5 reloads the page, F6 moves to the address bar, F11 is full screen, control R reloads, and control F opens the browser find bar. The game does not handle any of them. F5 and control R reload the page, but the crash copy means Resume on the main menu can bring the game back, and G saves the real thing to a file.')
@@ -141,6 +143,7 @@
         p: 'Pacing. Cycles fast, medium, slow and manual.',
         v: 'Verbosity. Switches between full and terse.',
         i: 'Play hints. Turns your coordinator\'s note about what a concept beats on and off.',
+        a: 'Announce players by. Cycles position and name, position only, and name only.',
         Escape: 'Back. Goes back one step and tells you where you are.',
         q: 'Quit. Asks you to confirm first.',
         ArrowUp: 'Up. Moves back one item in a list.',
@@ -178,7 +181,8 @@
             e: 'Defense. Who calls the defense.',
             l: 'Play clock. Off, relaxed, standard or fast.',
             b: 'Reports setting.',
-            i: 'Play hints. On or off.'
+            i: 'Play hints. On or off.',
+            a: 'Announce players by. Position and name, position only, or name only.'
         },
         final: {
             g: 'Save the finished game to a file.'

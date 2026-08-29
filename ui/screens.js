@@ -178,7 +178,7 @@
         lines.push('Your spotter is ' + home.staff.SPOT.name + ' and your trainer is ' + home.staff.TRAINER.name + '.');
         lines.push('Nobody has scouted them, so everything you hear tonight your staff works out as it goes.');
         lines.push(modeLine(app));
-        lines.push('Press Enter to go out for the coin toss. O and E set who calls each side. L sets the play clock. B sets how much your staff tells you. I turns the play hints on and off.');
+        lines.push('Press Enter to go out for the coin toss. O and E set who calls each side. L sets the play clock. B sets how much your staff tells you. I turns the play hints on and off. A sets how players are announced.');
         say(app, lines.join(' '), 'result');
         app.state.lastContext = 'the pre-game screen';
     }
@@ -187,7 +187,8 @@
         var M = CTRL().MODES;
         return 'Offense: ' + M[app.offenseMode] + '. Defense: ' + M[app.defenseMode] +
                '. Play clock ' + app.playClock.toLowerCase() + '. Reports ' + app.reportThreshold +
-               '. Play hints ' + app.state.hints + '. Pacing ' + app.state.pacing + '.';
+               '. Play hints ' + app.state.hints + '. Pacing ' + app.state.pacing +
+               '. Players announced by ' + U().NAMING_SAY[app.state.naming] + '.';
     }
 
     function toGame(app) {
@@ -197,7 +198,8 @@
             seed: app.pregameSeed, coachTeam: 0,
             offenseMode: app.offenseMode, defenseMode: app.defenseMode,
             playClock: app.playClock, reportThreshold: app.reportThreshold,
-            hints: app.state.hints, pacing: app.state.pacing, verbosity: app.state.verbosity
+            hints: app.state.hints, pacing: app.state.pacing, verbosity: app.state.verbosity,
+            naming: app.state.naming
         });
         app.state.mode = 'game';
         app.step = null;
@@ -239,6 +241,7 @@
         app.state.verbosity = controller.verbosity;
         app.state.hints = controller.hints || 'on';
         app.state.pacing = controller.pacing || 'medium';
+        app.state.naming = controller.naming || 'both';
         app.state.mode = controller.over ? 'final' : 'game';
         app.step = null;
         app.pickedFormation = null;
@@ -532,6 +535,21 @@
             if (app.game) CTRL().setHints(app.game, state.hints);
             chatter(app, isay);
             return { say: 'hints' };
+        }
+        if (key.name === 'a') {
+            var asay = U().cycleNaming(state);
+            chatter(app, asay);
+            if (app.game) {
+                CTRL().setNaming(app.game, state.naming);
+                // Say the last snap again in the setting just chosen. Naming
+                // the setting back at the coach tells him nothing about what
+                // it sounds like, and hearing the same play three ways is
+                // the fastest way to pick the one he wants. This is what the
+                // rebuildable event sentences were built for.
+                var again = CTRL().lastPlayLine(app.game);
+                if (again) say(app, again, 'result');
+            }
+            return { say: 'naming' };
         }
         if (key.name === 'Tab' && key.shift) {
             // The seed is how a coach reports a bug from play: it replays the

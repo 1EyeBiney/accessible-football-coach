@@ -734,6 +734,71 @@ module.exports = function (t) {
         t.ok(false, '(placeholder)');
     }
 
+    // ---------- A: how players are announced ----------
+    var d22 = driver(AF);
+    AF.screens.boot(d22.app);
+    d22.key('Enter').key('Enter').key('Enter');
+    t.eq(d22.app.state.naming, 'both', 'players are announced by position and name to begin with');
+    var na = d22.count();
+    d22.key('a');
+    t.eq(d22.app.state.naming, 'position', 'A moves on to position only');
+    t.ok(/position only/i.test(d22.since(na)), 'and says which setting it landed on');
+    t.eq(d22.app.game.naming, 'position', 'the controller keeps its mirror, so a save carries it');
+    t.eq(d22.app.game.game.naming, 'position', 'and the game carries it, which is what a snap reads');
+    d22.key('a');
+    t.eq(d22.app.state.naming, 'name', 'then name only');
+    d22.key('a');
+    t.eq(d22.app.state.naming, 'both', 'and wraps back round');
+
+    // The mode reaches what is actually spoken, and reaches lines already in
+    // the log: a coach who presses A hears the change on the next line, not
+    // on the next snap.
+    var g22 = 0, playLine = null;
+    while (d22.app.state.mode === 'game' && g22++ < 400) {
+        if (d22.app.step === 'toss-call') { d22.key('h'); continue; }
+        if (d22.app.state.viewer) { d22.key('Escape'); continue; }
+        if (d22.app.step === 'sub-answer') { d22.key('n'); continue; }
+        if (d22.app.state.mode === 'halftime') { d22.key('Enter'); continue; }
+        // Not just any snap: one whose events actually name somebody. A
+        // false start or a clean pocket names nobody, so all three settings
+        // would read it identically and the check would pass vacuously.
+        var logged = d22.app.game.game.log;
+        var found = null, li22;
+        for (li22 = logged.length - 1; li22 >= 0; li22--) {
+            var en = logged[li22];
+            if (en.kind === 'play' && en.res && en.res.events &&
+                en.res.events.some(function (e) { return e.tmpl && e.refs && e.refs.length; })) {
+                found = en; break;
+            }
+        }
+        if (found) { playLine = found; break; }
+        d22.key('Enter');
+    }
+    t.ok(playLine !== null, 'the driver reached a snap that named somebody');
+    if (playLine) {
+        var C22 = AF.controller, ctrl22 = d22.app.game;
+        C22.setNaming(ctrl22, 'both');
+        var sBoth = C22.renderEntry(ctrl22, playLine);
+        C22.setNaming(ctrl22, 'position');
+        var sPos = C22.renderEntry(ctrl22, playLine);
+        C22.setNaming(ctrl22, 'name');
+        var sName = C22.renderEntry(ctrl22, playLine);
+        t.ok(sBoth !== sPos && sPos !== sName && sBoth !== sName,
+             'one line already in the log reads three different ways');
+        t.ok(sBoth.length > sPos.length && sBoth.length > sName.length,
+             'and position and name together is the longest of the three');
+        // The tail of the line is the matchups, and it has to follow the
+        // setting too: re-reading the body but not the tail would be worse
+        // than not re-reading at all.
+        t.ok(/\(/.test(sBoth) && /\(/.test(sName), 'the line carries its matchups in both modes');
+        t.ok(sBoth.slice(sBoth.indexOf('(')) !== sName.slice(sName.indexOf('(')),
+             'and the matchups are named by the setting, not baked in when the snap resolved');
+        C22.setNaming(ctrl22, 'both');
+    } else {
+        t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)');
+        t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)');
+    }
+
     // ---------- the keys the help promises ----------
     // documentedKeys was written so a test could check that nothing is
     // described in one place and missing from another, and nothing called it.
@@ -742,7 +807,7 @@ module.exports = function (t) {
     // keyboard explorer is how a learner finds out what a key is for.
     var H = AF.help;
     var GAME_KEYS = ['Tab', 'x', 'z', 'm', 't', 'b', 'r', ' ', 'o', 'e', 'g',
-                     'c', 'p', 'v', 'i', 'q', 'Escape', 'Enter', 'F1', 'F12'];
+                     'c', 'p', 'v', 'i', 'a', 'q', 'Escape', 'Enter', 'F1', 'F12'];
     GAME_KEYS.forEach(function (k) {
         var desc = H.getKeyDescription(k, false, false, 'game', null);
         t.ok(!/does nothing here/.test(desc), 'the explorer describes ' + H.describeName(k) + ' on the game screen');
@@ -750,7 +815,8 @@ module.exports = function (t) {
 
     // And every documented key carries real words, not an empty string.
     var docs = H.documentedKeys('game');
-    t.ok(docs.indexOf('z') >= 0 && docs.indexOf('i') >= 0, 'the new keys are in the documented set');
+    t.ok(docs.indexOf('z') >= 0 && docs.indexOf('i') >= 0 && docs.indexOf('a') >= 0,
+         'the new keys are in the documented set');
     t.ok(docs.every(function (k) {
         var d = (H.MODE_KEYS.game && H.MODE_KEYS.game[k]) || H.COMMON_KEYS[k];
         return typeof d === 'string' && d.length > 5;
@@ -761,6 +827,7 @@ module.exports = function (t) {
     var gameProse = H.helpFor('game').map(function (x) { return x.text; }).join(' ');
     t.ok(/\bZ\b/.test(gameProse), 'Z is written into the game help prose');
     t.ok(/\bI\b/.test(gameProse), 'I is written into the game help prose');
+    t.ok(/\bA\b/.test(gameProse), 'A is written into the game help prose');
 
     // The look survives a save and a load, so a resumed game does not claim
     // ignorance it did not have.

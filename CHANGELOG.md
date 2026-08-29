@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0, August 29, 2026. How players are named.
+
+The play by play used to build its event sentences out of bare player names - "Marcus Webb beat Terrell Jones" - which is the one thing a coach who cannot see the field has nothing to anchor: no jersey number, no replay, no way to look a name up mid-drive. Every player now has a spoken position, and the default is the position and the last name: "nose tackle Webb beat right guard Jones".
+
+A cycles three settings - position and name, position only, name only - and says the last snap again in whatever setting was just chosen, so the difference can be heard rather than described. Name only gives the whole name, because fifty surnames are shared across the eighty men who dress and the last name alone produced "Fletcher beat Fletcher" about twice a game.
+
+The labels are authored per lineup slot, the same standing as the scheme matrix, and the convention was not invented from nothing: the run concepts already pair inside runs to the interior three slots and off-tackle runs to one edge, and coverage already sends the X receiver to the first defensive back and the Z to the second. On defense a label follows the man off the depth chart, so it stays with him through benchings, front changes and injuries and is something to learn him by. On offense it follows the job, because an offensive slot is a real position and a back filling in while the starter rests really is the running back while he is out there. DESIGN.md 4.4 records all of this, including that a defensive alignment here is a convention rather than modelled.
+
+A setting that only applied to the next snap would be a poor one, so a line that still carries its result is rebuilt when it is spoken, and every event keeps the shape it was written in alongside the men it names. Each result also carries a snapshot of who was standing where on that snap, so a line said again later names them as they were then and not as they stand now.
+
+The substitution list and the coordinators now speak the same vocabulary as the play by play, from one table rather than three: the list used to say "DL Marcus Webb", which a screen reader reads out as the letters D and L, in precisely the one place a coach maps a name to a position.
+
+Fixed in the same pass, all found by the milestone review: the timeout clause went silent about twice a game once lines started being rebuilt, so a coach late in a close game was never told his opponent had stopped the clock; the situation line said "three quarter" where it meant "third quarter", in every game ever played; and six more log lines were running into the next sentence for want of a full stop, the touchdown into the extra point most often.
+
+node test/run.js: 582 checks across eight files (was 518). Harness and matrix byte for byte unchanged - nothing here touches simulation - and seed replay confirmed unchanged with the setting cycled mid-game. Twenty-five whole games were replayed comparing the stored text against the rebuild: zero differences. Verified end to end in a real browser.
+
 ## 0.6.0, August 29, 2026. The listening pass.
 
 Three things from Brian's play notes, none of which touches how a snap resolves: the harness and the matrix are byte for byte unchanged across the whole milestone.

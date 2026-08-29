@@ -196,4 +196,183 @@ module.exports = function (t) {
     var legacy = Save.deserialize(deps, JSON.stringify(older));
     t.eq(legacy.hints, 'on', 'a save from before hints existed loads with them on');
     t.eq(legacy.pacing, 'medium', 'and with medium pacing');
+
+    // ---------- how players are named ----------
+
+    var P = deps.players;
+
+    // sayPlayer is the one place a player becomes speech.
+    var man = { name: 'Marcus Webb', live: { slot: 'nose tackle' } };
+    t.eq(P.sayPlayer(man, 'both'), 'nose tackle Webb', 'both gives position and last name');
+    t.eq(P.sayPlayer(man, 'position'), 'nose tackle', 'position gives the position alone');
+    // Name-only says the whole name. Fifty surnames are shared across eighty
+    // men who dress, so about twice a game the last name alone came out as
+    // "Fletcher beat Fletcher". In both-mode the position tells them apart
+    // and the last name is enough; with the position gone it is not.
+    t.eq(P.sayPlayer(man, 'name'), 'Marcus Webb', 'name gives the whole name, so two Webbs are told apart');
+    t.eq(P.lastName(man), 'Webb', 'the last name is still what both-mode uses');
+    t.eq(P.sayPlayer(man), 'nose tackle Webb', 'no mode is the default, which is both');
+    t.eq(P.sayPlayer(null, 'both'), '', 'nobody says nothing');
+
+    // A man with no slot stamped on him is off the field, and a position we
+    // cannot vouch for is worse than none.
+    t.eq(P.sayPlayer({ name: 'Gene Orsini', live: {} }, 'both'), 'Orsini',
+         'a player with no slot falls back to his name');
+    t.eq(P.sayPlayer({ name: 'Pele', live: { slot: 'center' } }, 'both'), 'center Pele',
+         'a one-word name is its own last name');
+
+    // The defensive labels go by depth, not by how many are on the field, so
+    // a man keeps the same name whatever front is called around him. That is
+    // the whole point: it is what makes a label something to learn him by.
+    t.eq(P.defSlotSay('LB', 0), 'mike linebacker', 'the first linebacker is the mike');
+    t.eq(P.defSlotSay('LB', 0), P.defSlotSay('LB', 0), 'and stays the mike');
+    t.eq(P.defSlotSay('DB', 0), 'left corner', 'the first back is the left corner');
+    t.eq(P.defSlotSay('DB', 4), 'nickel back', 'the fifth is the nickel');
+    t.eq(P.defSlotSay('DB', 5), 'dime back', 'the sixth is the dime');
+    t.eq(P.defSlotSay('DL', 1), 'nose tackle', 'the second lineman is the nose');
+    // Past the table, the group's own plain word rather than nothing.
+    t.eq(P.defSlotSay('DL', 40), 'defensive lineman', 'a roster deeper than the table still says something true');
+    t.eq(P.defSlotSay('LB', 40), 'linebacker', 'the same for linebackers');
+    t.eq(P.defSlotSay('DB', 40), 'defensive back', 'and for backs');
+
+    // The offensive line convention matches how the run concepts use the
+    // slots: inside runs pair OL3, OL2 and OL4, which is the interior three.
+    t.eq(P.SLOT_SAY.OL3, 'center', 'the middle lineman is the center');
+    t.eq(P.SLOT_SAY.OL1, 'left tackle', 'and the first is the left tackle');
+    t.eq(P.SLOT_SAY.WR1, 'X receiver', 'the first receiver is the X, as the staff already calls him');
+
+    // Every man on the field gets stamped, both sides of the ball.
+    var cName = newGame(41);
+    step(cName, 30);
+    var onField = deps.game.onFieldList(
+        deps.game.offenseLineup(cName.game.teams[0], 'IFORM', deps.players, deps.plays));
+    t.ok(onField.length > 0, 'the offensive lineup has players in it');
+    t.ok(onField.every(function (p) { return typeof p.live.slot === 'string' && p.live.slot.length > 0; }),
+         'every man in an offensive lineup is given a position to be called by');
+    var dLine = deps.game.defenseLineup(cName.game.teams[1], 'NICKEL', deps.plays, deps.players);
+    t.eq(dLine.DB.length, 5, 'a nickel puts five backs on the field');
+    t.ok(dLine.DL.concat(dLine.LB).concat(dLine.DB).every(function (p) {
+             return typeof p.live.slot === 'string' && p.live.slot.length > 0;
+         }), 'and every man in a defensive lineup too');
+    t.eq(dLine.DB[4].live.slot, 'nickel back', 'the fifth back in a nickel is the nickel back');
+
+    // The same man keeps his label when the front changes around him.
+    var nickelMike = dLine.LB[0];
+    var threeFour = deps.game.defenseLineup(cName.game.teams[1], 'THREE4', deps.plays, deps.players);
+    t.eq(threeFour.LB[0], nickelMike, 'the same man leads the linebackers in both fronts');
+    t.eq(nickelMike.live.slot, 'mike linebacker', 'and he is the mike in both, not a sam in one of them');
+
+    // And - the case the first version got wrong - he keeps it when the man
+    // in front of him is rested. The index used to be into the list of who
+    // was available, not the depth chart, so benching one player renamed
+    // everybody behind him: a nose tackle became a left end for a series and
+    // then changed back (found by the milestone review). A label whose whole
+    // job is to let a coach learn who somebody is has to stay put.
+    var dTeam = cName.game.teams[1];
+    var starter = dTeam.roster.byId[dTeam.roster.depth.DL[0]];
+    var second = dTeam.roster.byId[dTeam.roster.depth.DL[1]];
+    deps.game.defenseLineup(dTeam, 'NICKEL', deps.plays, deps.players);
+    var secondBefore = second.live.slot;
+    t.eq(starter.live.slot, 'left end', 'the first lineman on the chart is the left end');
+    t.eq(secondBefore, 'nose tackle', 'and the second is the nose tackle');
+    starter.live.benched = true;
+    deps.game.defenseLineup(dTeam, 'NICKEL', deps.plays, deps.players);
+    t.eq(second.live.slot, secondBefore, 'resting the man in front of him does not rename him');
+    var third = dTeam.roster.byId[dTeam.roster.depth.DL[2]];
+    t.eq(third.live.slot, 'defensive tackle', 'nor anybody else behind him');
+    starter.live.benched = false;
+    deps.game.defenseLineup(dTeam, 'NICKEL', deps.plays, deps.players);
+    t.eq(second.live.slot, secondBefore, 'and he is called the same thing when the starter comes back');
+    t.eq(starter.live.slot, 'left end', 'and the starter has his own name back');
+
+    // A label is captured on the result, so a line said again later names
+    // the men as they were on that snap rather than as they stand now.
+    var cSnap = newGame(45);
+    step(cSnap, 40);
+    var snapEntry = null, si;
+    for (si = cSnap.game.log.length - 1; si >= 0; si--) {
+        if (cSnap.game.log[si].kind === 'play' && cSnap.game.log[si].res) { snapEntry = cSnap.game.log[si]; break; }
+    }
+    t.ok(snapEntry !== null, 'a snap was played');
+    if (snapEntry) {
+        t.ok(snapEntry.res.slotOf && Object.keys(snapEntry.res.slotOf).length > 0,
+             'the result keeps who was standing where on that snap');
+        var beforeMove = C.renderEntry(cSnap, snapEntry);
+        // Move everybody's live label somewhere else entirely; the line must
+        // not follow, because it is describing a snap that already happened.
+        cSnap.game.teams[0].roster.players.forEach(function (p) { p.live.slot = 'somewhere else'; });
+        cSnap.game.teams[1].roster.players.forEach(function (p) { p.live.slot = 'somewhere else'; });
+        t.eq(C.renderEntry(cSnap, snapEntry), beforeMove,
+             'and the line reads the same afterwards, rather than borrowing where they stand now');
+    } else {
+        t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)');
+    }
+
+    // The mode reaches the play by play, and pressing A takes effect on the
+    // next line spoken rather than on the next snap: a line that still
+    // carries its result is rebuilt rather than read from what was stored.
+    var cSay = newGame(43);
+    step(cSay, 60);
+    var withBoth = cSay.log.join(' ');
+    t.ok(/(receiver|tackle|guard|linebacker|corner|safety|end|back|center)/.test(withBoth),
+         'the play by play names positions');
+
+    var lastPlay = null, li;
+    for (li = cSay.game.log.length - 1; li >= 0; li--) {
+        if (cSay.game.log[li].kind === 'play' && cSay.game.log[li].res) { lastPlay = cSay.game.log[li]; break; }
+    }
+    t.ok(lastPlay !== null, 'the log keeps the result alongside the text, which is what makes A retroactive');
+    if (lastPlay) {
+        var asBoth = C.renderEntry(cSay, lastPlay);
+        C.setNaming(cSay, 'position');
+        var asPos = C.renderEntry(cSay, lastPlay);
+        C.setNaming(cSay, 'name');
+        var asName = C.renderEntry(cSay, lastPlay);
+        C.setNaming(cSay, 'both');
+        t.ok(asBoth !== asPos, 'a line already in the log reads differently in position only');
+        t.ok(asPos !== asName, 'and differently again in name only');
+        t.eq(C.renderEntry(cSay, lastPlay), asBoth, 'and comes back to what it was');
+    } else {
+        t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)');
+    }
+
+    // Rebuilding a line must not lose anything the stored text carried. The
+    // timeout clause lived only on the two strings, so the moment the
+    // controller started rebuilding from the result the coach stopped being
+    // told his opponent had stopped the clock, about twice a game (found by
+    // the milestone review). It rides on the result now.
+    var timeoutEntry = { kind: 'play', team: 0, text: 'stored', terse: 'stored',
+                         res: null };
+    var anyPlay = null, ti;
+    for (ti = cSay.game.log.length - 1; ti >= 0; ti--) {
+        if (cSay.game.log[ti].kind === 'play' && cSay.game.log[ti].res) { anyPlay = cSay.game.log[ti]; break; }
+    }
+    if (anyPlay) {
+        timeoutEntry.res = anyPlay.res;
+        t.ok(C.renderEntry(cSay, timeoutEntry).indexOf('timeout') < 0, 'an ordinary snap says nothing about a timeout');
+        anyPlay.res.timeoutBy = 'Fairview';
+        t.ok(/timeout Fairview/.test(C.renderEntry(cSay, timeoutEntry)),
+             'and a snap the other side stopped the clock on says so, rebuilt or not');
+        C.setVerbosity(cSay, 'terse');
+        t.ok(/timeout Fairview/.test(C.renderEntry(cSay, timeoutEntry)), 'in terse too');
+        C.setVerbosity(cSay, 'full');
+        delete anyPlay.res.timeoutBy;
+    } else {
+        t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)'); t.ok(false, '(placeholder)');
+    }
+
+    t.eq(C.setNaming(cSay, 'position'), 'position', 'the setter takes a real mode');
+    t.eq(cSay.game.naming, 'position', 'and puts it where the engine reads it when a snap resolves');
+    t.eq(C.setNaming(cSay, 'nonsense'), 'both', 'and anything else falls back to the default');
+
+    // Naming survives a save, like every other preference.
+    var cNameSave = newGame(47, { naming: 'name' });
+    step(cNameSave, 20);
+    var reloadedName = Save.deserialize(deps, Save.serialize(cNameSave));
+    t.eq(reloadedName.naming, 'name', 'naming comes back from a save');
+    t.eq(reloadedName.game.naming, 'name', 'and is put back on the game the engine reads');
+    var legacyName = JSON.parse(Save.serialize(cNameSave));
+    delete legacyName.controller.naming;
+    t.eq(Save.deserialize(deps, JSON.stringify(legacyName)).naming, 'both',
+         'a save from before naming existed loads with position and name');
 };

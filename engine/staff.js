@@ -221,10 +221,25 @@
 
     // ---------- turning beliefs into hunches ----------
 
-    var OFF_SAY = { WR1: 'our X receiver', WR2: 'our Z receiver', WR3: 'our slot receiver',
-                    TE1: 'our tight end', TE2: 'our second tight end', RB1: 'our back', RB2: 'our fullback' };
-    var DEF_SAY = { WR1: 'their X receiver', WR2: 'their Z receiver', WR3: 'their slot receiver',
-                    TE1: 'their tight end', TE2: 'their second tight end', RB1: 'their back', RB2: 'their fullback' };
+    // A coordinator names a man by his position, which is the voice
+    // DESIGN.md 5.3 writes into its own examples and the voice the play by
+    // play now shares. Both are built from the one table in players.js so
+    // the coach never hears the same man called two things by two people,
+    // and so the two cannot drift apart (found by the milestone review;
+    // this file used to carry its own copy saying "our back" where the play
+    // by play said "running back").
+    var ROLES = ['WR1', 'WR2', 'WR3', 'TE1', 'TE2', 'RB1', 'RB2'];
+
+    function sideSay(prefix) {
+        var out = {}, i, r;
+        var slots = (root.AF && root.AF.players && root.AF.players.SLOT_SAY) ||
+                    (typeof require === 'function' ? require('./players.js').SLOT_SAY : {});
+        for (i = 0; i < ROLES.length; i++) { r = ROLES[i]; if (slots[r]) out[r] = prefix + slots[r]; }
+        return out;
+    }
+
+    var OFF_SAY = sideSay('our ');
+    var DEF_SAY = sideSay('their ');
     var POA_SAY = { inside: 'between the tackles', offtackle: 'off tackle', outside: 'on the edge', draw: 'on the draw' };
 
     function roleSay(store, role) { return (store.side === 'O' ? OFF_SAY : DEF_SAY)[role] || role; }

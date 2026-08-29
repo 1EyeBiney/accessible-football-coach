@@ -1,43 +1,57 @@
 # Morning report
 
-Written August 29, 2026, after the coin toss milestone. Plain prose, as always. The first section is what is new to your ears; the rest is what happened and what is parked.
+Written August 29, 2026, after the listening pass and the naming pass. Plain prose, as always. Two milestones went in, both from your play notes and our conversation about the "X beat Y" lines. Everything is committed and pushed.
 
-## The coin toss and the kickoff
+## What to open, and the first thing you will notice
 
-The game no longer starts itself. After the pre-game screen you hear "The teams are on the field," the whistle, and then the captains meet at midfield: H calls heads, T calls tails, while the coin is in the air. Win it and you hear "You win the toss. Take the ball." - Enter takes it, F offers deferring to the second half or kicking off. Lose it and they take the ball, like a computer captain always will.
+Open index.html the way you always do, Enter to begin, through the menu and the team choice to the pre-game screen, and Enter again for the coin toss.
 
-Then the kickoff itself is a call, both directions. Kicking, Enter takes the deep kick and F offers a squib, a pooch, or an onside kick. Receiving, Enter takes the regular return and F offers the hands team. In full control you are asked at every kickoff; hand a side to your coordinator with the stop-me setting and he only stops you when an onside kick is genuinely in play - fourth quarter, inside four minutes, one score or two down - which is also exactly when the computer coach will try one against you, so listen for the hands team recommendation late in a close game. An onside kick is a real gamble: about one in five against a regular return unit, half that against a hands team.
+The first thing that is different is on the very first play. You will hear a low short blip, then what happened, then the referee whistle, then the down and distance, then the set tone, then the next call. The blip is the snap: everything after it belongs to the play, everything before it was you deciding. That is the boundary you asked for between the suggestion and the description, and it is the one thing I would most like your ear on, because I could only check its timing in a browser without a screen reader running.
 
-Defend-an-end is deliberately missing from the toss. The engine has no wind for it to mean anything, and a choice that changes nothing is a lie; it is written down for the day an elements model exists.
+The second thing is the names. Where the game used to say "Marcus Webb beat Terrell Jones" it now says "nose tackle Webb beat right guard Jones". Every player has a position now, on both sides of the ball.
 
-## Also new under the hood
+## The three new keys
 
-The game now counts, quietly, how many decisions you made yourself against how many your staff made for you - the seed of the career scoring we agreed on from proposal 4. Nothing announces it yet; it rides through saves and waits for the career milestones.
+Z is the mirror of X. X is your own setup; Z is what the other team had on the field on the last snap. On offense it names the front they ran and how many linemen, linebackers and defensive backs were in it. On defense it names the formation and the personnel they showed - which the pre-snap prompt deliberately will not tell you, because the formation is hidden until the line, but by the time you press Z the snap has happened and you have earned it. If you have not seen that unit yet this possession it says so rather than guessing.
 
-## The whistle, from the previous build and still fresh
+I turns the play hints on and off. A hint is your coordinator's note about what a concept beats and loses to, on the suggestion and on the call sheet both. It used to be tied to V, which meant you could not have the full play by play without the tutoring; they are separate settings now.
 
-After every play, you now hear the result as its own utterance, then one of your eight referee whistles, then the next suggestion as a separate utterance. The whistle is the ready-for-play whistle: everything before it belongs to the play that just happened, everything after it belongs to the next one. No two whistles repeat until all eight have been heard, and which one plays is chosen outside the game's seed, so replays are untouched. The play clock, when you have it on, now starts at the whistle, like real football.
+A sets how players are announced, cycling position and name, position only, and name only. It also says the last play again in whatever setting you just landed on, so you can hear the three side by side and pick rather than guess. Name only gives the whole name, not the last name, because fifty surnames are spread across the eighty men who dress and you were getting "Fletcher beat Fletcher" about twice a game.
 
-The timing, retuned after your first listen: the whistle now fires at half the speech-length estimate, so at your rate it should land on the tail of the announcement rather than leaving a dead gap - impinging on purpose, as you asked. P still scales it, any key still wins immediately.
+All three work everywhere, and I and A also work on the pre-game screen, where Tab now reads them back with everything else.
 
-The call prompt has a new shape, also from your notes: after the whistle you hear the down and distance on its own, then a short tone, then the call - on defense, the personnel they show, then the suggestion. The tone is synthesised, not a file, so its length is exact and the prompt follows tight on its end.
+## What the positions actually mean, because it is not quite one rule
 
-## The defensive look
+On defense, a position stays with a man all game. It follows his place on your depth chart, so it survives you resting him, changing fronts around him, or anyone in front of him going down. That is what makes it something to learn him by. It is honestly a convention rather than a real alignment - the engine models position groups, not where a man lines up - and DESIGN.md 4.4 says so plainly.
 
-When you are calling the defense, the prompt now starts with what the offense is showing: "They show twenty one personnel," and then your coordinator's suggested call. That personnel read is exactly what the engine's own defensive coordinator is handed, nothing more — real defenses match personnel, and the formation is only revealed at the line, so it is deliberately not announced. On your first defensive snap, before anyone has seen anything, you will hear "No look at their personnel yet" rather than a guess.
+On offense it is the job on the field instead, because those slots are real positions. A back filling in while your starter gets his legs back really is called the running back while he is out there. So you will hear the same man called two things across a game on offense, and that is correct rather than a bug.
 
-## The seed
+One thing that came out of this and is written down rather than fixed: your offensive line slides a position when you rest one man. Bench the left tackle and the left guard becomes the left tackle, the center becomes the left guard, and so on. Real teams put a backup tackle at tackle. The naming made that audible rather than causing it, and fixing it changes which lineman blocks which defender, so it wants its own pass with the harness run before and after.
 
-Shift Tab speaks the seed of the current game as a plain number. Write it down with anything you notice and the whole game can be replayed exactly. Tab is unchanged: the short situation line.
+## The ball position, which you were right about
 
-## The play clock, if you use it
+You heard "ball on our own 25" on defense when the ball was on their 25. Where the ball is was being worked out from the offense's point of view rather than yours, so on defense every spot in the game had the wrong possessive. It is now worked out from your side of the ball and is right on both sides.
 
-Two changes worth hearing, both from the auditor rather than from your notes. Letting the clock expire on your own offensive call now actually announces the delay of game - it had been silently moving the ball five yards since the clock was built. And letting it expire on your own defensive call no longer flags your opponent: the ball is snapped and your defense goes with the call your coordinator suggested, which is what stalling on defense costs in real football.
+Two things fell out of fixing it. You had been hearing the same spot named two different ways inside a single utterance - "at their twenty four" from the situation line and then "at opponent twenty four" from the play by play - because there were two formatters with two vocabularies; there is one now. And "kickoff returned to the our own thirty eight", which was the new wording meeting an old template.
 
-## What is parked, by your own call
+Several lines were also running straight into the next sentence for want of a full stop. The touchdown into the extra point was the frequent one: "Touchdown Riverton extra point is no good." Kickoffs, punts, field goals, safeties, the coin toss, halftime and overtime all had it.
 
-The designated target mechanic stays parked from session two. The OC shell-read clause and defend-an-end at the toss are written down in ISSUES.md's Not started. Intent calling and the career accounting from proposal 4 wait for the career milestones; only their seed, the decision count, is live.
+And one that predates everything and was audible in every game you have ever played: the situation line said "three quarter, twelve minutes" where it meant "third quarter".
+
+## What is parked, and why
+
+Special teams still name nobody, in any mode, so you never meet your kicker, your punter or your returner. That is a gap in the naming idea rather than a defect in it, and it is written into ISSUES.md rather than bolted onto the end of a milestone.
+
+Z says "no look at their offense yet" on the first snap of every new drive, even in the fourth quarter against a team you have watched all night. The guard behind that is deliberate - it is what stops Z ever reporting your own unit as theirs - but your memory is not per-possession and the wording should probably be "the last time they had the ball". It needs a small decision from you about how stale information should be presented, so it is logged rather than guessed at.
+
+The question your third note raised, whether the defense should see your personnel and get a chance to answer it with a substitution, is written up in full as DESIGN_PROPOSALS.md proposal 5 - the football reasoning, what it would cost, and why it belongs in the same pass as the stale-personnel bug already logged. You chose to have it written up rather than built, and I think that was right: it changes the snap order and therefore what a seed replays.
+
+## What I need from you
+
+Mostly just your ear on the snap cue's timing, the same way the whistle needed a second pass. It fires as soon as you commit and the result waits on the end of the tone, so it should feel tight, but you are the one who can tell.
+
+After that, whether position and name is the right default or whether you would rather start somewhere else, and whether the position labels themselves sound right to you - "left end", "nose tackle", "mike linebacker", "nickel back", "X receiver", "right guard". Those are authored and easy to change.
 
 ## Where everything is written down
 
-PROGRESS.md has the session entries in order. ISSUES.md moved the coin toss and kickoff to Done. CHANGELOG.md is at 0.5.0. REVIEW_NOTES.md has every reviewer pass. DESIGN.md carries status notes under 8.4 (the toss and kickoff as built) and 22 (proposal 4 accepted). Everything is committed and pushed to github.com/1EyeBiney/accessible-football-coach.
+PROGRESS.md has both milestones in order. ISSUES.md moved your three play notes and the naming work to Done, and gained the two new items above. CHANGELOG.md is at 0.7.0. REVIEW_NOTES.md has both reviewer passes in full, including what they checked and found fine. DESIGN.md gained section 4.4 on the position labels. Test suite is at 582 checks across eight files, up from 413 when the session started; the harness and the matrix are byte for byte what they were, because none of this touches how a snap resolves.
