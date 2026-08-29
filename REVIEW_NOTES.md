@@ -131,3 +131,31 @@ A score at zero on the clock deferred a kickoff nobody would play after, and the
 The kickoff gate uses offenseMode for both the kick and the receive call, so a coach with offense delegated and defense in hand is not asked about the hands team even in an onside window against him. This follows the fourth-down precedent deliberately - a kickoff is about possession, and the receiving team is the offense about to be - but the reviewer is right that a defense-minded coach might see it the other way. Written down rather than changed; if it grates in play it is a one-line gate.
 
 The reviewer also listed coverage that still does not exist: nothing compares a fully delegated controller game against headless playGame for the same seed (the cheapest guard against controller-versus-headless drift), and nothing asserts what a kickoff-return touchdown speaks. The first is worth writing when the controller is next touched; the fixed speaking bug makes the second less urgent.
+
+## Accessibility auditor, session 5, after the listening pass
+
+The auditor read the new lead concept in ui/core.js, the whole cue state machine in main.js, the Z and I keys, the possessive fix, and the save fields, and traced every path a cue can take through the timers. Ten findings, six real. All six were fixed the same session.
+
+### Fixed
+
+The snap cue was thrown away on every boundary continuation, and that was the sharp one. A lead is read off the segment about to be spoken, but the whistle and set-tone continuations drained the queue directly, and dequeueSegment clears the lead it did not play. So the cue only ever survived when the coach's own key happened to release the segment that owed it. The case is not hypothetical: promptNext sets the step synchronously inside the previous keypress, a second or two before the prompt is actually spoken from behind the whistle, and a coach who presses Enter in that gap puts his result a segment further back. Every continuation now goes through one releaseNext, which honours a cue wherever it sits.
+
+The same bug in a second place: the play clock expiring on the coach's own defensive call snaps the ball, and that path drained directly too, so the one snap a coach did not ask for was also the one snap with no cue. It goes through releaseNext now like every other.
+
+Loading a save changed pacing and the play hints under the coach in silence. Both are now carried on the controller so they survive a file, which is the fix that made them persist at all - and persisting them meant a game saved on medium could quietly take a coach off manual and start advancing on its own. Resume now speaks the settings that came back with the game, which is CLAUDE.md's "no silent changes to values the user is not on" applied to a load.
+
+The snap cue was documented nowhere. A new recurring sound with no entry in help is a sound a coach cannot look up. The game help now names all three sounds around a play in the order they come: the snap blip, the referee whistle, the set tone.
+
+I is a global key and was documented only in the game prose, so F1 on the pre-game screen never mentioned it even though that screen's own instruction line advertises it. It is in the keys-that-work-everywhere block now.
+
+The pre-game screen still said "Press Enter to kick off" a milestone after Enter started opening the coin toss.
+
+### Left, with reasons
+
+Z says "no look at their offense yet" on the first snap of every new drive, even in the fourth quarter against a team the coach has watched all night. The guard is right - reporting one team's look as the other's is a correctness bug, not a cosmetic one - but the guard is per-possession and the coach's memory is not. Making Z report the last time he faced that unit, worded so it does not claim to be last snap, is a real improvement and a small design question about how stale information should be presented. Written into ISSUES.md rather than changed here.
+
+Two theoretical findings were checked and left: startSegment's uiIsOpen bail can in principle leave the timers unarmed, which cannot fire today because only a keypress can open any of those layers and a keypress re-drains; and startSegment now calls cancelWhistle defensively, which was the auditor's suggested insurance and cost nothing.
+
+The auditor also re-flagged two things from the previous milestone that are not this one's: the comment in engine/game.js claiming a headless seed replays exactly as before is stale now that trailing teams kick onside, and the kickoff gate reads offenseMode for both sides. The second is already recorded above with its reasoning. The first is a comment to correct next time that file is opened; the harness numbers were confirmed byte-identical across this whole milestone, so nothing has drifted.
+
+What the auditor confirmed and does not need re-investigating: no Z or I collision on any screen, step, or layer; the explorer describes both correctly in all eight modes and eight steps; opponentUnit never goes silent, never says undefined, never speaks a digit, and never reports one team's look as the other's across 48,000 probes; the possessive is correct at every call site with the harness unchanged; no cue can fire in front of an open viewer, help, confirmation, explorer, or file picker; no segment is drained twice; no speech is permanently stranded; and the hint gating can never leave a prompt empty.

@@ -27,6 +27,7 @@
         l('C repeats the last thing you were told.'),
         l('P changes the pacing between fast, medium, slow and manual. On manual, the game waits for the spacebar before anything happens on its own.'),
         l('V switches between full and terse. Terse gives you one line a play.'),
+        l('I turns the play hints on and off. A hint is the short note your coordinator adds about what a concept beats and what it loses to. It is separate from V, so you can keep the full play by play and still stop being taught the playbook you already know.'),
         l('Escape goes back one step and tells you where you have ended up.'),
         l('Q quits. You will be asked to confirm.'),
         l('Five keys belong to the browser and not to the game: F5 reloads the page, F6 moves to the address bar, F11 is full screen, control R reloads, and control F opens the browser find bar. The game does not handle any of them. F5 and control R reload the page, but the crash copy means Resume on the main menu can bring the game back, and G saves the real thing to a file.')
@@ -47,6 +48,7 @@
         l('Your coordinator suggests a formation and a play as soon as the last one is over. You do not have to ask.'),
         l('A referee whistle marks the ball ready for play. Everything before the whistle belongs to the last play; everything after it belongs to the next one.'),
         l('After the whistle you hear the down and distance, then a short tone, then the call. On defense the call starts with what personnel the offense is showing, which is the same look your coordinator builds his call from.'),
+        l('There are three sounds around a play, and they always come in the same order. A low short blip is the snap: you have committed to a call and what follows it is what happened. The referee whistle is the ball ready for play. A higher short tone is the set tone, between the down and distance and the call itself.'),
         l('Enter accepts what he suggested.'),
         l('F opens the formation list if you want something else. Pick a formation, then pick a play from the call sheet for this down and distance.'),
         l('N calls no huddle. It keeps the same personnel and denies the defense a clean substitution, but your players tire faster and you get less information.'),
@@ -65,7 +67,9 @@
         l('T reads what your staff has worked out about what this opponent likes to call on this down and distance.'),
         l('R reads the low priority notes that have been collecting.'),
         l('X examines the current setup: who is on the field, who is resting, who is hurt, and what your coordinator is thinking.'),
+        l('Z is the other half of X. It says what the other team had on the field on the last snap: their front and how many linemen, linebackers and defensive backs they were in when you have the ball, or the formation and personnel they showed when you are on defense. Before you have seen them it says so rather than guessing.'),
         l('B changes how much your staff tells you, between everything, important only, and injuries and substitutions only. Injuries and substitution requests always get through.'),
+        l('I turns the play hints on and off. A hint is the short clause your coordinator adds about what a concept beats and loses to, on the suggestion and on the call sheet. Turn it off once you know the playbook; it is separate from V, so you can keep the full play by play and stop the tutoring.'),
         h('Answering a substitution request'),
         l('When a coordinator wants somebody out, the play cannot be called until you answer.'),
         l('Y takes him out now. That counts as a substitution and lets the defense reset too.'),
@@ -136,6 +140,7 @@
         c: 'Repeat. Says the last thing you were told again.',
         p: 'Pacing. Cycles fast, medium, slow and manual.',
         v: 'Verbosity. Switches between full and terse.',
+        i: 'Play hints. Turns your coordinator\'s note about what a concept beats on and off.',
         Escape: 'Back. Goes back one step and tells you where you are.',
         q: 'Quit. Asks you to confirm first.',
         ArrowUp: 'Up. Moves back one item in a list.',
@@ -159,6 +164,7 @@
             t: 'Tendencies. What the opponent likes to call on this down and distance.',
             r: 'Reports. The notes that have been collecting.',
             x: 'Examine. Who is on the field, who is resting, who is hurt.',
+            z: 'Theirs. What the other team had on the field on the last snap.',
             b: 'Reports setting. Everything, important only, or injuries and substitutions only.',
             o: 'Offense. Who calls the offense.',
             e: 'Defense. Who calls the defense.',
@@ -171,7 +177,8 @@
             o: 'Offense. Who calls the offense.',
             e: 'Defense. Who calls the defense.',
             l: 'Play clock. Off, relaxed, standard or fast.',
-            b: 'Reports setting.'
+            b: 'Reports setting.',
+            i: 'Play hints. On or off.'
         },
         final: {
             g: 'Save the finished game to a file.'

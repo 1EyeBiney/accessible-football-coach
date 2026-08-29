@@ -106,7 +106,12 @@
         // The set tone: between the down and distance and the rest of the
         // call prompt. Synthesised, so its length is known exactly and the
         // speaker can time the next utterance right off its end.
-        set:     { freq: 480, type: 'triangle', dur: 0.15 }
+        set:     { freq: 480, type: 'triangle', dur: 0.15 },
+        // The snap cue: between the call the coach just made and what
+        // happened on the play. Low and short, so it reads as the ball being
+        // put in play rather than as another prompt, and well clear of the
+        // set tone above it (ISSUES.md, from play).
+        snap:    { freq: 200, type: 'square',   dur: 0.10 }
     };
 
     function tone(name) {

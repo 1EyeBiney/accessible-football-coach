@@ -425,6 +425,14 @@ module.exports = function (t) {
     t.eq(d12.app.state.mode, 'game', 'Resume lands in the game');
     t.eq(d12.app.game.log.length, snapsAtCrash, 'Resume picks up exactly where the crash copy left off');
     t.ok(d12.since(n).toLowerCase().indexOf('resumed') >= 0, 'Resume announces that the game resumed');
+    // A load brings the saved settings back, and pacing changes whether the
+    // game advances on its own. Saying which settings came back is the "no
+    // silent changes to values the user is not on" rule applied to a load
+    // (found by the audit: pacing used to change under him in silence).
+    var resumedLine = d12.since(n).toLowerCase();
+    t.ok(resumedLine.indexOf('pacing') >= 0, 'and says what pacing it came back on');
+    t.ok(resumedLine.indexOf('play hints') >= 0, 'and whether the play hints are on');
+    t.ok(resumedLine.indexOf('offense:') >= 0, 'and who is calling each side');
 
     // Note on a related finding: the accessibility auditor also flagged that
     // nothing cleared state.confirm on a load, which matters only for the
@@ -542,6 +550,7 @@ module.exports = function (t) {
     var events = [];
     var d19 = driver(AF);
     d19.app.out.boundary = function (kind) { events.push('[boundary ' + (kind || 'whistle') + ']'); };
+    d19.app.out.lead = function (kind) { events.push('[lead ' + (kind || 'snap') + ']'); };
     var origSay = d19.app.out.say;
     d19.app.out.say = function (text, priority, source) {
         events.push(text);
@@ -577,11 +586,17 @@ module.exports = function (t) {
             sawSnap = true;
             var b = events.indexOf('[boundary whistle]');
             var s19 = events.indexOf('[boundary set]');
+            var ld = events.indexOf('[lead snap]');
             t.ok(b > 0, 'a snap places the whistle boundary after the result, not before it');
             t.ok(s19 > b + 1, 'the down and distance sits between the whistle and the set tone');
             t.ok(/at (our own|their|the fifty)/.test(events[s19 - 1]),
                  'and the line before the set tone is the down and distance');
             t.ok(s19 < events.length - 1, 'the rest of the prompt comes after the set tone');
+            // The snap cue is a lead, not a boundary: it is owed before the
+            // result rather than after it, so it lands ahead of everything
+            // the snap produced (ISSUES.md, from play).
+            t.eq(ld, 0, 'the snap cue is the first thing a committed call produces');
+            t.ok(ld < b, 'and it comes before the whistle that ends the play');
             break;
         }
         if (d19.app.state.mode === 'halftime') { d19.key('Enter'); }
@@ -628,6 +643,124 @@ module.exports = function (t) {
     g20b.lastOffTeam = 1 - g20b.game.off;
     t.eq(C20.offenseShows(g20b), 'No look at their personnel yet.',
          'a look at the other team, as after a turnover, is never reported as a look at this one');
+
+    // ---------- Z, I, and the keys that must always answer ----------
+    // (ISSUES.md, from play.) Z is the mirror of X: what they had on the
+    // field. It answers on both sides of the ball and never says nothing.
+    var nz = d20.count();
+    d20.key('z');
+    var zLine = d20.since(nz);
+    t.ok(zLine.length > 0, 'Z always answers');
+    t.ok(/they|look/i.test(zLine), 'and what it says is about the other team');
+    t.ok(!/undefined/.test(zLine), 'Z never speaks undefined');
+
+    // The same white-box guard Z shares with the defensive look: a unit seen
+    // on the other side of a change of possession is not a look at this one.
+    g20b.lastRunFront = 'NICKEL';
+    g20b.lastDefTeam = 1 - g20b.game.off;
+    if (g20b.game.off === g20b.coach) {
+        t.ok(/nickel/i.test(C20.opponentUnit(g20b)), 'on offense Z names the front they actually ran');
+        g20b.lastDefTeam = g20b.game.off;
+        t.eq(C20.opponentUnit(g20b), 'No look at their defense yet.',
+             'and a front from before a change of possession is not reported as theirs now');
+    } else {
+        t.ok(/personnel|yet/.test(C20.opponentUnit(g20b)), 'on defense Z reports their offense');
+        g20b.lastOffFormation = null;
+        t.eq(C20.opponentUnit(g20b), 'No look at their offense yet.',
+             'and with nothing seen it says so rather than guessing');
+    }
+
+    // I turns the hints off, and it is independent of V: a coach can keep
+    // the full play by play and stop being taught.
+    var d21 = driver(AF);
+    AF.screens.boot(d21.app);
+    d21.key('Enter').key('Enter').key('Enter');
+    t.eq(d21.app.state.hints, 'on', 'play hints start on');
+    var ni = d21.count();
+    d21.key('i');
+    t.eq(d21.app.state.hints, 'off', 'I turns them off');
+    t.ok(/hints off/i.test(d21.since(ni)), 'and says so');
+    t.eq(d21.app.game.hints, 'off', 'the controller keeps its own mirror, so a save carries it');
+    t.eq(d21.app.state.verbosity, 'full', 'and turning hints off does not touch verbosity');
+    d21.key('i');
+    t.eq(d21.app.state.hints, 'on', 'I turns them back on');
+
+    // And the hint actually leaves the spoken prompt. Two drivers play the
+    // same game, one with hints on and one with them off, and the offensive
+    // prompt is compared word for word: the concept's description is the
+    // only difference, and nothing else about the call changes.
+    function promptAt(hints) {
+        var d = driver(AF);
+        AF.screens.boot(d.app);
+        d.key('Enter').key('Enter');
+        if (hints === 'off') d.key('i');
+        // The pre-game screen mixes the clock into the seed, so the two runs
+        // have to be pinned to the same game to be comparable at all.
+        d.app.pregameSeed = 4242;
+        d.key('Enter');
+        var guard = 0;
+        while (d.app.state.mode === 'game' && guard++ < 400) {
+            if (d.app.step === 'toss-call') { d.key('h'); continue; }
+            if (d.app.state.viewer) { d.key('Escape'); continue; }
+            if (d.app.step === 'sub-answer') { d.key('n'); continue; }
+            if (d.app.state.mode === 'halftime') { d.key('Enter'); continue; }
+            if (d.app.step === 'offense-suggest') {
+                var sug = AF.controller.suggestion(d.app.game, 'offense');
+                if (sug && sug.describe) {
+                    var m = d.count();
+                    d.key('x');                    // any info key, to re-read nothing
+                    return { prompt: d.spoken.filter(function (s) {
+                                 return s.source === 'OC' && /Enter accepts/.test(s.text);
+                             }).pop(), describe: sug.describe, seed: d.app.game.game.rng.seed };
+                }
+            }
+            d.key('Enter');
+        }
+        return null;
+    }
+    var pOn = promptAt('on'), pOff = promptAt('off');
+    t.ok(pOn && pOn.prompt, 'a game with hints on reaches an offensive prompt');
+    t.ok(pOff && pOff.prompt, 'and so does one with hints off');
+    if (pOn && pOff && pOn.prompt && pOff.prompt) {
+        t.eq(pOn.seed, pOff.seed, 'the two games are the same game, so the prompts are comparable');
+        t.ok(pOn.prompt.text.indexOf(pOn.describe) >= 0, 'with hints on the prompt carries the concept description');
+        t.ok(pOff.prompt.text.indexOf(pOff.describe) < 0, 'with hints off it does not');
+        t.eq(pOff.prompt.text, pOn.prompt.text.replace(' ' + pOn.describe, ''),
+             'and the description is the only difference: the call itself is untouched');
+    } else {
+        t.ok(false, 'both prompts are needed to compare');
+        t.ok(false, '(placeholder)');
+        t.ok(false, '(placeholder)');
+        t.ok(false, '(placeholder)');
+    }
+
+    // ---------- the keys the help promises ----------
+    // documentedKeys was written so a test could check that nothing is
+    // described in one place and missing from another, and nothing called it.
+    // Every key the game screen actually handles must reach a real
+    // description rather than the "does nothing here" fallback, because the
+    // keyboard explorer is how a learner finds out what a key is for.
+    var H = AF.help;
+    var GAME_KEYS = ['Tab', 'x', 'z', 'm', 't', 'b', 'r', ' ', 'o', 'e', 'g',
+                     'c', 'p', 'v', 'i', 'q', 'Escape', 'Enter', 'F1', 'F12'];
+    GAME_KEYS.forEach(function (k) {
+        var desc = H.getKeyDescription(k, false, false, 'game', null);
+        t.ok(!/does nothing here/.test(desc), 'the explorer describes ' + H.describeName(k) + ' on the game screen');
+    });
+
+    // And every documented key carries real words, not an empty string.
+    var docs = H.documentedKeys('game');
+    t.ok(docs.indexOf('z') >= 0 && docs.indexOf('i') >= 0, 'the new keys are in the documented set');
+    t.ok(docs.every(function (k) {
+        var d = (H.MODE_KEYS.game && H.MODE_KEYS.game[k]) || H.COMMON_KEYS[k];
+        return typeof d === 'string' && d.length > 5;
+    }), 'every documented key has a description worth hearing');
+
+    // The prose help and the key tables must not drift apart: a key the
+    // tables document should be findable in the words a coach reads with F1.
+    var gameProse = H.helpFor('game').map(function (x) { return x.text; }).join(' ');
+    t.ok(/\bZ\b/.test(gameProse), 'Z is written into the game help prose');
+    t.ok(/\bI\b/.test(gameProse), 'I is written into the game help prose');
 
     // The look survives a save and a load, so a resumed game does not claim
     // ignorance it did not have.

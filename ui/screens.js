@@ -135,6 +135,10 @@
     // drivers that predate it keep working.
     function boundary(app, kind) { if (app.out.boundary) app.out.boundary(kind); }
 
+    // The mirror: a sound owed before the next utterance rather than after
+    // the last one. Same optional guard, for the same reason.
+    function lead(app, kind) { if (app.out.lead) app.out.lead(kind); }
+
     // ---------- screen transitions ----------
 
     function toMenu(app) {
@@ -174,7 +178,7 @@
         lines.push('Your spotter is ' + home.staff.SPOT.name + ' and your trainer is ' + home.staff.TRAINER.name + '.');
         lines.push('Nobody has scouted them, so everything you hear tonight your staff works out as it goes.');
         lines.push(modeLine(app));
-        lines.push('Press Enter to kick off. O and E set who calls each side. L sets the play clock. B sets how much your staff tells you.');
+        lines.push('Press Enter to go out for the coin toss. O and E set who calls each side. L sets the play clock. B sets how much your staff tells you. I turns the play hints on and off.');
         say(app, lines.join(' '), 'result');
         app.state.lastContext = 'the pre-game screen';
     }
@@ -182,7 +186,8 @@
     function modeLine(app) {
         var M = CTRL().MODES;
         return 'Offense: ' + M[app.offenseMode] + '. Defense: ' + M[app.defenseMode] +
-               '. Play clock ' + app.playClock.toLowerCase() + '. Reports ' + app.reportThreshold + '.';
+               '. Play clock ' + app.playClock.toLowerCase() + '. Reports ' + app.reportThreshold +
+               '. Play hints ' + app.state.hints + '. Pacing ' + app.state.pacing + '.';
     }
 
     function toGame(app) {
@@ -191,7 +196,8 @@
             deps: app.deps, home: app.chosen.home, away: app.chosen.away,
             seed: app.pregameSeed, coachTeam: 0,
             offenseMode: app.offenseMode, defenseMode: app.defenseMode,
-            playClock: app.playClock, reportThreshold: app.reportThreshold
+            playClock: app.playClock, reportThreshold: app.reportThreshold,
+            hints: app.state.hints, pacing: app.state.pacing, verbosity: app.state.verbosity
         });
         app.state.mode = 'game';
         app.step = null;
@@ -231,6 +237,8 @@
         app.playClock = controller.playClock;
         app.reportThreshold = controller.reportThreshold;
         app.state.verbosity = controller.verbosity;
+        app.state.hints = controller.hints || 'on';
+        app.state.pacing = controller.pacing || 'medium';
         app.state.mode = controller.over ? 'final' : 'game';
         app.step = null;
         app.pickedFormation = null;
@@ -250,7 +258,13 @@
             fin.review.forEach(function (line) { say(app, line, 'batched'); });
             say(app, 'Press Enter to return to the menu.', 'batched');
         } else {
-            say(app, 'Resumed. ' + C.situationLine(controller), 'result');
+            // A load brings the saved game's settings back with it, and some
+            // of them change how the game behaves without the coach touching
+            // anything: pacing decides whether it advances on its own. Saying
+            // which settings came back is the "no silent changes to values
+            // the user is not on" rule of CLAUDE.md applied to a load (found
+            // by the audit; before this, pacing changed under him in silence).
+            say(app, 'Resumed. ' + C.situationLine(controller) + ' ' + modeLine(app), 'result');
             boundary(app);
             promptNext(app);
         }
@@ -430,8 +444,12 @@
         // engine's own coordinator is handed (DESIGN.md 16.5, ISSUES.md
         // 2026-08-28 on defensive awareness).
         if (side === 'defense' && C.offenseShows) say(app, C.offenseShows(app.game), 'result');
+        // The hint is what the concept beats, and it hangs off the hints
+        // setting alone. It used to hang off verbosity, which meant a coach
+        // who wanted the full play by play could not stop being taught
+        // (ISSUES.md, from play).
         var line = s.text;
-        if (app.state.verbosity === 'full' && s.describe) line += ' ' + s.describe;
+        if (app.state.hints === 'on' && s.describe) line += ' ' + s.describe;
         say(app, line + ' Enter accepts.', 'result', side === 'offense' ? 'OC' : 'DC');
     }
 
@@ -497,12 +515,23 @@
             return { say: 'explore' };
         }
         if (key.name === 'c') { say(app, state.lastReport || 'Nothing said yet.', 'result'); return { say: 'repeat' }; }
-        if (key.name === 'p') { chatter(app, U().cyclePacing(state)); return { say: 'pacing' }; }
+        if (key.name === 'p') {
+            var psay = U().cyclePacing(state);
+            if (app.game) CTRL().setPacing(app.game, state.pacing);
+            chatter(app, psay);
+            return { say: 'pacing' };
+        }
         if (key.name === 'v') {
             var vsay = U().cycleVerbosity(state);
             if (app.game) CTRL().setVerbosity(app.game, state.verbosity);
             chatter(app, vsay);
             return { say: 'verbosity' };
+        }
+        if (key.name === 'i') {
+            var isay = U().cycleHints(state);
+            if (app.game) CTRL().setHints(app.game, state.hints);
+            chatter(app, isay);
+            return { say: 'hints' };
         }
         if (key.name === 'Tab' && key.shift) {
             // The seed is how a coach reports a bug from play: it replays the
@@ -772,6 +801,9 @@
         }
         if (key.name === 'Tab') { say(app, C.situationLine(g), 'result'); return { say: 'status' }; }
         if (key.name === 'x') { say(app, C.examine(g), 'result'); return { say: 'examine' }; }
+        // X is your own setup; Z is theirs, which is the question a coach asks
+        // once the play is over (ISSUES.md, from play).
+        if (key.name === 'z') { say(app, C.opponentUnit(g), 'result'); return { say: 'theirs' }; }
         if (key.name === 'm') { say(app, C.matchups(g).join(' '), 'result', 'OC'); return { say: 'matchups' }; }
         if (key.name === 't') { say(app, C.tendencies(g), 'result', 'OC'); return { say: 'tendencies' }; }
         if (key.name === 'b') { cycleThreshold(app); return { say: 'reports' }; }
@@ -950,7 +982,13 @@
             openFormationList(app);
             return;
         }
-        var menu = U().makeMenu(sheet.map(function (p) { return { id: p.id, text: p.text }; }),
+        // The sheet is where a coach who is still learning chooses between
+        // concepts, so it is the one place the hint earns its length. The
+        // field was already being computed and thrown away.
+        var hints = app.state.hints === 'on';
+        var menu = U().makeMenu(sheet.map(function (p) {
+                                    return { id: p.id, text: hints && p.describe ? p.text + ' ' + p.describe : p.text };
+                                }),
                                 'The call sheet for this down and distance. Escape goes back to the formations.');
         app.state.viewer = { kind: 'play', menu: menu };
         tone(app, 'open');
@@ -1015,6 +1053,12 @@
     }
 
     function afterSnap(app, said) {
+        // The cue that separates the call from what happened. Everything
+        // before it is the coach deciding; everything after it is the play
+        // (ISSUES.md, from play). It has to be a lead rather than a boundary:
+        // by now the suggestion has been spoken and the queue is empty, and a
+        // boundary in front of nothing marks nothing.
+        lead(app, 'snap');
         emit(app, said);
         if (app.game && CTRL().pending(app.game).kind === 'over') {
             app.state.mode = 'final';

@@ -34,7 +34,8 @@
             say: function (text, priority, source, report) { AF.ui.enqueue(queue, text, priority, source, report); },
             tone: function (name) { AF.dom.tone(name); },
             panel: function (lines) { AF.dom.panel(lines); },
-            boundary: function (kind) { AF.ui.queueBoundary(queue, kind); }
+            boundary: function (kind) { AF.ui.queueBoundary(queue, kind); },
+            lead: function (kind) { AF.ui.queueLead(queue, kind); }
         };
     }
 
@@ -62,6 +63,42 @@
         if (report && app) app.state.lastReport = report;
         AF.dom.announce(text);
         return text;
+    }
+
+    // A cue owed *before* the next utterance rather than after the last one.
+    // The snap cue lives here: it fires the moment the coach commits a call,
+    // and the result waits on the tone's own end, which is the one duration
+    // this file ever knows exactly (the golf yield pattern again). Returns
+    // whether it spoke or deferred, because onKeyDown reads an empty result as
+    // a key nothing wanted and must not do that while speech is legitimately
+    // held behind a cue.
+    function startSegment() {
+        var kind = AF.ui.leadKind(queue);
+        if (!kind) return { deferred: false, said: speakSegment() };
+        cancelWhistle();
+        var gen = ++whistleGen;
+        AF.dom.tone(kind);
+        var spec = AF.dom.TONES && AF.dom.TONES[kind];
+        var ms = ((spec && spec.dur) || 0.12) * 1000;
+        whistleTimer = root.setTimeout(function () {
+            whistleTimer = null;
+            if (gen !== whistleGen) return;
+            if (uiIsOpen()) return;
+            proceed(speakSegment());
+        }, ms + 90);
+        return { deferred: true, said: '' };
+    }
+
+    // Release the next utterance, honouring a cue owed in front of it. Every
+    // boundary continuation goes through this rather than draining directly:
+    // a lead can sit on any segment, not only the first one after a keypress,
+    // because a coach who commits a call while the previous prompt is still
+    // behind the whistle puts the new result a segment further back. Draining
+    // it directly threw that cue away, since dequeueSegment clears the lead
+    // it did not play (found by the audit).
+    function releaseNext() {
+        var begun = startSegment();
+        if (!begun.deferred) proceed(begun.said);
     }
 
     // What happens after an utterance: if a boundary is holding more speech,
@@ -108,7 +145,7 @@
             AF.dom.playClip('whistle', function () {
                 if (gen !== whistleGen) return;
                 if (uiIsOpen()) return;
-                proceed(speakSegment());
+                releaseNext();
             });
         }, Math.max(300, wait));
     }
@@ -130,7 +167,7 @@
                 whistleTimer = null;
                 if (gen !== whistleGen) return;
                 if (uiIsOpen()) return;
-                proceed(speakSegment());
+                releaseNext();
             }, toneMs + 120);
         }, Math.max(250, wait));
     }
@@ -147,7 +184,7 @@
     // finishes outside any key press, so nothing else is waiting to drain the
     // queue and re-arm the timers the way onKeyDown does below.
     function announceNow() {
-        proceed(speakSegment());
+        releaseNext();
     }
 
     // ---------- the pause before the game moves on its own ----------
@@ -181,7 +218,8 @@
                 var p = AF.controller.pending(app.game);
                 if (!p || p.kind !== 'auto') return;
                 AF.screens.handleKey(app, { name: 'Enter', shift: false, ctrl: false, alt: false, auto: true });
-                proceed(speakSegment());
+                // A delegated snap gets the same cue a called one does.
+                releaseNext();
             });
         }, Math.max(400, wait));
     }
@@ -222,7 +260,9 @@
                         'The ball is snapped. Your defense goes with the call your coordinator suggested.'),
                         'result', 'DC', true);
                     AF.screens.handleKey(app, { name: 'Enter', shift: false, ctrl: false, alt: false, auto: true });
-                    proceed(speakSegment());
+                    // Through releaseNext like every other snap: this one is
+                    // still a snap and still owes the cue (found by the audit).
+                    releaseNext();
                     return;
                 }
                 // delayOfGame drains its own queue and returns what was said;
@@ -277,9 +317,15 @@
         cancelAuto();
         stopPlayClock();
         cancelWhistle();
+        // A cue that has not played yet belongs to the action the coach just
+        // interrupted, so it is dropped rather than replayed in front of his
+        // key. Cleared before handleKey, which is where a fresh one is set.
+        AF.ui.queueClearLeads(queue);
         try {
             var out = AF.screens.handleKey(app, key);
-            var said = speakSegment();
+            var begun = startSegment();
+            if (begun.deferred) return;
+            var said = begun.said;
             // Silence is a bug (DESIGN.md 21.3). A key nothing wanted still
             // gets an answer, so the coach can tell a key that did nothing
             // from a game that has stopped responding.

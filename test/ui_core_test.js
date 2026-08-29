@@ -309,4 +309,69 @@ module.exports = function (t) {
     t.eq(U.lastBoundaryKind(kq), 'set', 'a set boundary owes the set tone');
     U.dequeueSegment(kq);
     t.eq(U.lastBoundaryKind(kq), null, 'the final segment owes nothing');
+
+    // ---------- leads: a sound owed before a segment ----------
+    // (ISSUES.md, from play: the snap cue.) A boundary marks the end of a
+    // segment and cannot express this, because when the coach commits a call
+    // the queue is empty and there is no segment to mark.
+    var lq = U.makeQueue();
+    t.eq(U.leadKind(lq), null, 'an empty queue owes no lead');
+    U.queueBoundary(lq, 'snap');
+    U.enqueue(lq, 'the result', 'result');
+    t.eq(U.leadKind(lq), null, 'a boundary in front of an empty segment marks nothing, which is why leads exist');
+
+    var lq2 = U.makeQueue();
+    U.queueLead(lq2, 'snap');
+    t.eq(U.leadKind(lq2), null, 'a lead with nothing queued behind it is not owed yet');
+    U.enqueue(lq2, 'the result', 'result');
+    t.eq(U.leadKind(lq2), 'snap', 'once the segment has a line, its lead is owed');
+    t.eq(U.leadKind(lq2), 'snap', 'reading a lead does not consume it');
+    U.dequeueSegment(lq2);
+    t.eq(U.leadKind(lq2), null, 'draining the segment clears its lead, so a cue never plays twice');
+
+    // A segment can owe a sound before it and a different sound after it:
+    // the snap cue leads the result, the whistle follows it.
+    var lq3 = U.makeQueue();
+    U.queueLead(lq3, 'snap');
+    U.enqueue(lq3, 'the result', 'result');
+    U.queueBoundary(lq3);
+    U.enqueue(lq3, 'the next prompt', 'result');
+    t.eq(U.leadKind(lq3), 'snap', 'the result segment owes the snap cue before it');
+    U.dequeueSegment(lq3);
+    t.eq(U.lastBoundaryKind(lq3), 'whistle', 'and the whistle after it');
+    t.eq(U.leadKind(lq3), null, 'the prompt behind the whistle owes no lead of its own');
+
+    // A key from the coach drops a cue that has not played, the same way it
+    // silences a whistle already in the air.
+    var lq4 = U.makeQueue();
+    U.queueLead(lq4, 'snap');
+    U.enqueue(lq4, 'the result', 'result');
+    U.queueClearLeads(lq4);
+    t.eq(U.leadKind(lq4), null, 'clearing leads drops a cue the coach interrupted');
+    t.eq(U.dequeueSegment(lq4).length, 1, 'and the speech it was holding is still there to say');
+
+    var lq5 = U.makeQueue();
+    U.queueLead(lq5, 'snap');
+    U.enqueue(lq5, 'gone', 'result');
+    U.queueClear(lq5);
+    U.enqueue(lq5, 'fresh', 'result');
+    t.eq(U.leadKind(lq5), null, 'a cleared queue keeps no leads from the game before it');
+
+    // A lead can sit on a segment that is not the first one waiting. This is
+    // the coach committing a call while the previous prompt is still behind
+    // the whistle: his result lands a segment further back, and the cue has
+    // to survive until that segment is the one being spoken. Every boundary
+    // continuation in main.js goes through releaseNext for this reason
+    // (found by the audit).
+    var lq6 = U.makeQueue();
+    U.enqueue(lq6, 'the prompt he has not heard yet', 'result');
+    U.queueBoundary(lq6);
+    U.queueLead(lq6, 'snap');
+    U.enqueue(lq6, 'the result of the play he just called', 'result');
+    t.eq(U.leadKind(lq6), null, 'the segment waiting first owes no cue');
+    U.dequeueSegment(lq6);
+    t.eq(U.lastBoundaryKind(lq6), 'whistle', 'the prompt is followed by the whistle');
+    t.eq(U.leadKind(lq6), 'snap', 'and the cue is still owed by the segment behind it');
+    U.dequeueSegment(lq6);
+    t.eq(U.leadKind(lq6), null, 'and is cleared once that segment is spoken');
 };

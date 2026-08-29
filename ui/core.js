@@ -69,7 +69,7 @@
     var PRIORITY_ORDER = { result: 0, must: 1, batched: 2, ui: 3 };
 
     function makeQueue() {
-        return { items: [], seq: 0, speaking: null, segment: 0, marks: {}, lastMark: null };
+        return { items: [], seq: 0, speaking: null, segment: 0, marks: {}, leads: {}, lastMark: null };
     }
 
     // report marks football the coach may ask to hear again with C, as
@@ -109,6 +109,32 @@
         return q;
     }
 
+    // The mirror of queueBoundary: a sound owed *before* a segment is spoken
+    // rather than after it. The snap cue needs this and a boundary cannot
+    // give it. By the time the coach presses Enter on a suggestion, that
+    // suggestion has already been spoken and the queue is empty, so
+    // queueBoundary would take its empty-segment return and mark nothing.
+    // A lead is recorded against the segment the next line will land in, so
+    // it survives the queue being empty at the moment it is asked for
+    // (ISSUES.md, from play: a boundary between the call and the result).
+    function queueLead(q, kind) {
+        q.leads[q.segment || 0] = kind || 'snap';
+        return q;
+    }
+
+    // The sound owed before the next segment is spoken, or null. Reading it
+    // does not consume it; dequeueSegment does that, so a lead cannot be
+    // played twice for one segment.
+    function leadKind(q) {
+        if (!q.items.length) return null;
+        return q.leads[q.items[0].segment || 0] || null;
+    }
+
+    // Drops every cue that has not played. A key from the coach takes
+    // precedence over anything the game was about to do on its own, and a cue
+    // still owed belongs to the action he just interrupted.
+    function queueClearLeads(q) { q.leads = {}; return q; }
+
     function dequeue(q) {
         if (!q.items.length) return null;
         var item = q.items.shift();
@@ -130,6 +156,7 @@
         q.speaking = out[out.length - 1] || null;
         q.lastMark = q.marks[seg] || null;
         delete q.marks[seg];
+        delete q.leads[seg];
         return out;
     }
 
@@ -140,7 +167,7 @@
     function queueHasItems(q) { return q.items.length > 0; }
 
     function queueClear(q) {
-        q.items = []; q.speaking = null; q.segment = 0; q.marks = {}; q.lastMark = null;
+        q.items = []; q.speaking = null; q.segment = 0; q.marks = {}; q.leads = {}; q.lastMark = null;
         return q;
     }
 
@@ -313,8 +340,8 @@
 
     function newState(mode) {
         return { mode: mode || 'boot', confirm: null, explore: false, help: null,
-                 viewer: null, pacing: 'medium', verbosity: 'full', lastReport: '',
-                 lastContext: '',
+                 viewer: null, pacing: 'medium', verbosity: 'full', hints: 'on',
+                 lastReport: '', lastContext: '',
                  // True while the native file picker or save dialog is open. No
                  // real keydown reaches the page while it has focus, but the
                  // pacing timer and the play clock are our own code and would
@@ -408,11 +435,20 @@
         return 'Verbosity ' + state.verbosity + '.';
     }
 
+    // Hints are the coordinator explaining what a concept beats. Separate
+    // from verbosity on purpose: an experienced coach wants the full play by
+    // play and none of the tutoring (ISSUES.md, from play).
+    function cycleHints(state) {
+        state.hints = state.hints === 'on' ? 'off' : 'on';
+        return 'Play hints ' + state.hints + '.';
+    }
+
     var api = {
         sanitize: sanitize, numberWords: numberWords,
         makeQueue: makeQueue, enqueue: enqueue, dequeue: dequeue, queueClear: queueClear,
         queueBoundary: queueBoundary, dequeueSegment: dequeueSegment, queueHasItems: queueHasItems,
-        lastBoundaryKind: lastBoundaryKind,
+        lastBoundaryKind: lastBoundaryKind, queueLead: queueLead, leadKind: leadKind,
+        queueClearLeads: queueClearLeads,
         PRIORITY_ORDER: PRIORITY_ORDER, PACING: PACING, PACING_ORDER: PACING_ORDER, pauseFor: pauseFor,
         makeMenu: makeMenu, menuAnnounce: menuAnnounce, menuMove: menuMove, menuSelect: menuSelect,
         menuFastForward: menuFastForward,
@@ -423,7 +459,7 @@
         FALLS_THROUGH: FALLS_THROUGH, layerActive: layerActive,
         askConfirm: askConfirm, resolveConfirm: resolveConfirm,
         makeHelp: makeHelp, helpAnnounce: helpAnnounce, helpMove: helpMove, helpHeading: helpHeading,
-        cyclePacing: cyclePacing, cycleVerbosity: cycleVerbosity
+        cyclePacing: cyclePacing, cycleVerbosity: cycleVerbosity, cycleHints: cycleHints
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

@@ -55,9 +55,24 @@
     }
 
     // Where the ball is, spoken the way a coach says it.
-    function spotWords(ball) {
+    //
+    // game.ball is stored offense-relative (game.js setPossession), so the
+    // half the ball is in belongs to the offense below fifty and to the
+    // defense above it. "Our" has to be resolved against the coach, not
+    // against the offense: on defense after a kickoff the ball sits on the
+    // other team's own twenty-five, and calling that "our own twenty-five"
+    // says the opposite of what happened (ISSUES.md, from play).
+    //
+    // offIdx and coachIdx are the team indices. Pass coachIdx as null for a
+    // game nobody is coaching, which is the harness: it keeps the old
+    // offense-relative wording so headless output is unchanged.
+    function spotWords(ball, offIdx, coachIdx) {
         if (ball === 50) return 'midfield';
-        return (ball < 50 ? 'our own ' : 'their ') + words(ball < 50 ? ball : 100 - ball);
+        var nearSide = ball < 50;
+        var ours = coachIdx === null || coachIdx === undefined
+            ? nearSide
+            : (nearSide ? offIdx : 1 - offIdx) === coachIdx;
+        return (ours ? 'our own ' : 'their ') + words(nearSide ? ball : 100 - ball);
     }
 
     // ---------- construction ----------
@@ -84,6 +99,16 @@
             over: false,
             lastReport: '',
             verbosity: opts.verbosity || 'full',
+            // Whether the coordinator explains himself. Verbosity is about how
+            // much detail the play by play carries; hints are about whether a
+            // coach still learning gets told what a concept beats. Different
+            // questions, so they are different settings (ISSUES.md, from play).
+            hints: opts.hints || 'on',
+            // Pacing lives on the interface, but a preference only survives a
+            // save if the controller carries it, because the controller is
+            // what engine/save.js writes. It was the one setting without a
+            // mirror, so P reset to medium on every load.
+            pacing: opts.pacing || 'medium',
             secondHalfPlan: null
         };
         c.game = deps.game.startGame(deps, opts.home, opts.away, opts.seed);
@@ -234,7 +259,7 @@
             return g.teams[g.pendingKickoff.kickIdx].name + ' kicking off. ' + scorePart;
         }
         var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
-        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball) + '. ' + scorePart;
+        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball, g.off, c.coach) + '. ' + scorePart;
     }
 
     // Just the down, distance and spot, for the head of every call prompt.
@@ -243,7 +268,7 @@
     function shortSituation(c) {
         var g = c.game;
         var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
-        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ' at ' + spotWords(g.ball) + '.';
+        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ' at ' + spotWords(g.ball, g.off, c.coach) + '.';
     }
 
     // What is on the field and what the defense is showing, front-loaded by
@@ -284,6 +309,30 @@
         if (!seen) return 'No look at their personnel yet.';
         var p = PL.FORMATIONS[c.lastOffFormation].personnel;
         return 'They show ' + words(Number(p)) + ' personnel.';
+    }
+
+    // Z: what the other team had on the field on the last snap. X is the
+    // coach's own setup; this is its mirror, and it is the question Brian says
+    // he actually asks once a play is over (ISSUES.md, from play).
+    //
+    // This is a retrospective, not a pre-snap read, which is why it may name
+    // the offense's formation where offenseShows deliberately will not: the
+    // formation is hidden until the line, and by now the coach has heard the
+    // snap it was run on. Same guard as offenseShows either way - a look only
+    // counts when it was a look at the unit the coach is facing now.
+    function opponentUnit(c) {
+        var PL = c.deps.plays, g = c.game;
+        if (offenseIsCoach(c)) {
+            if (!c.lastRunFront || c.lastDefTeam !== 1 - g.off) return 'No look at their defense yet.';
+            var f = PL.FRONTS[c.lastRunFront];
+            return 'They were in ' + f.name + ': ' +
+                   words(f.dl) + ' linemen, ' + words(f.lb) + (f.lb === 1 ? ' linebacker, ' : ' linebackers, ') +
+                   words(f.db) + ' defensive backs.';
+        }
+        if (!c.lastOffFormation || c.lastOffTeam !== g.off) return 'No look at their offense yet.';
+        var form = PL.FORMATIONS[c.lastOffFormation];
+        return 'Last snap they were in ' + form.name + ', ' +
+               words(Number(form.personnel)) + ' personnel: ' + form.say + '.';
     }
 
     // ---------- suggestions (DESIGN.md 16.5) ----------
@@ -755,6 +804,11 @@
         // on him (found by the milestone review; the one-line form predates
         // it). Terse still gives one line per play where a terse form exists.
         if (res && res.formation) { c.lastFormation = res.formation; c.lastOffFormation = res.formation; c.lastOffTeam = offBefore; }
+        // The front that actually ran, for the Z key. c.lastDefFront is set
+        // inside buildSuggestion and is only the front the coordinator
+        // *suggested*; reporting that as what was on the field would be a
+        // claim about the other team the coach never earned.
+        if (res && res.call && res.call.front) { c.lastRunFront = res.call.front; c.lastDefTeam = 1 - offBefore; }
         var spoken = [], li, entry, lineText;
         for (li = logBefore; li < g.log.length; li++) {
             entry = g.log[li];
@@ -917,6 +971,16 @@
         return c.verbosity;
     }
 
+    function setHints(c, on) {
+        c.hints = on === 'off' ? 'off' : 'on';
+        return c.hints;
+    }
+
+    function setPacing(c, mode) {
+        c.pacing = mode;
+        return c.pacing;
+    }
+
     function setReportThreshold(c, level) {
         c.reportThreshold = level;
         say(c, 'Reports: ' + level + '.', 'result', null);
@@ -932,7 +996,7 @@
                 newGame: newGame, pending: pending, drain: drain,
                 situationLine: situationLine, shortSituation: shortSituation,
                 examine: examine, suggestion: suggestion,
-                offenseShows: offenseShows,
+                offenseShows: offenseShows, opponentUnit: opponentUnit,
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
@@ -944,7 +1008,7 @@
                 matchups: matchups, tendencies: tendencies, postgameReview: postgameReview,
                 playClockSeconds: playClockSeconds, delayOfGame: delayOfGame,
                 setMode: setMode, setReportThreshold: setReportThreshold,
-                setVerbosity: setVerbosity, final: final,
+                setVerbosity: setVerbosity, setHints: setHints, setPacing: setPacing, final: final,
                 words: words, clockWords: clockWords, spotWords: spotWords, staminaWord: staminaWord };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

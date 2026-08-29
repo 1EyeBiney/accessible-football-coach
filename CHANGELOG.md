@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0, August 29, 2026. The listening pass.
+
+Three things from Brian's play notes, none of which touches how a snap resolves: the harness and the matrix are byte for byte unchanged across the whole milestone.
+
+The ball position is now spoken from the coach's side of the ball (ISSUES.md, from play). Where the ball is was resolved against the offense rather than against the coach, so on defense every spot carried the offense's possessives: a kickoff returned to their own twenty-five was announced as "ball on our own 25". It is now resolved against who owns the half the ball is in compared to the coach's own team, correct on both sides, and the engine's own formatter shares one vocabulary with the situation line - the same spot used to be named two ways inside a single utterance, "at their twenty four" and then "at opponent twenty four". A game nobody is coaching keeps the old offense-relative wording, which is what leaves headless output untouched. Two smaller things fixed alongside: "kickoff returned to the our own thirty eight", and kickoff lines running into the next sentence for want of a full stop.
+
+A snap cue now separates the call from the result. The order around every play is snap cue, result, referee whistle, down and distance, set tone, call. This needed a new idea in the announce queue: a lead, a sound owed before a segment is spoken, as opposed to a boundary, which marks the end of one. A boundary cannot express it, because by the time the coach commits a call the suggestion has been spoken and the queue is empty, so there is no segment left to mark.
+
+I turns the play hints on and off, on the suggestion and on the call sheet both. The hint - the coordinator's note about what a concept beats - used to hang off verbosity, which meant a coach who wanted the full play by play could not stop being taught. They are separate settings now. Hints and pacing both survive a save, and Resume says which settings came back with the game rather than changing them under the coach; pacing was the one preference with no mirror on the controller, so it silently reset on every load.
+
+Z is the mirror of X: what the other team had on the field on the last snap. On offense it names the front they actually ran and its linemen, linebackers and defensive backs; on defense the formation and personnel they showed, which the pre-snap line withholds on purpose and a retrospective can give. It never reports one team's unit as the other's.
+
+node test/run.js: 518 checks across eight files (was 413), including a new reporting suite for the possessive in all four quadrants, the Z key, and the preferences surviving a save; queue-lead coverage in ui/core.js; and the key-documentation test that documentedKeys was written for and nothing had ever called. An accessibility auditor pass found six real things, all fixed the same session - the sharpest being that the snap cue was thrown away whenever the coach committed a call while the previous prompt was still behind the whistle. Full findings in REVIEW_NOTES.md. Verified end to end in a real browser.
+
 ## 0.5.0, August 29, 2026. The coin toss and the kickoff.
 
 Every game now opens with the coin toss (ISSUES.md, from play): the coach calls it in the air with H or T - always asked, whatever the delegation settings, because it happens once and it is his moment - and a winner chooses receive, defer to the second half, or kick, Enter accepting the recommendation and F offering the list. Defend-an-end is deliberately not offered: the engine has no wind or field direction for it to mean anything yet.

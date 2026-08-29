@@ -406,28 +406,28 @@
             var pRec = rcall === 'HANDS' ? 0.10 : 0.22;
             if (rng.chance(pRec)) {
                 line = Math.round(clamp(rng.normal(52, 3), 46, 58));
-                text = 'onside kick, and ' + game.teams[kickIdx].name + ' recover it';
+                text = 'onside kick, and ' + game.teams[kickIdx].name + ' recover it.';
                 game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
                 game.clock = Math.max(0, game.clock - 4);
                 setPossession(game, kickIdx, line);
                 return;
             }
             line = Math.round(clamp(rng.normal(47, 4), 40, 55));
-            text = 'onside kick, recovered by ' + game.teams[recv].name;
+            text = 'onside kick, recovered by ' + game.teams[recv].name + '.';
         } else if (kcall === 'SQUIB') {
             // Short field position traded for no return and no disaster.
             line = Math.round(clamp(rng.normal(35, 5), 25, 48));
-            text = 'squib kick, taken at the ' + spot(line);
+            text = 'squib kick, taken at ' + spot(line, recv, coachIdxOf(game)) + '.';
         } else if (kcall === 'POOCH') {
             line = Math.round(clamp(rng.normal(22, 5), 12, 35));
-            text = 'pooch kick, fair caught at the ' + spot(line);
+            text = 'pooch kick, fair caught at ' + spot(line, recv, coachIdxOf(game)) + '.';
         } else if (rcall === 'HANDS') {
             // A hands team fielding a deep ball gives up the return game.
             line = Math.round(clamp(rng.normal(15, 6), 3, 25));
-            text = 'kickoff against the hands team, brought out to the ' + spot(line);
+            text = 'kickoff against the hands team, brought out to ' + spot(line, recv, coachIdxOf(game)) + '.';
         } else {
             var pTB = clamp((leg - 35) * 0.02, 0.03, 0.7);
-            if (rng.chance(pTB)) { line = RULES.HS.touchback; text = 'kickoff into the end zone, touchback'; }
+            if (rng.chance(pTB)) { line = RULES.HS.touchback; text = 'kickoff into the end zone, touchback.'; }
             else {
                 var ret = Math.round(clamp(rng.normal(24, 8), 3, 45));
                 // A long return is rare and a return for a score is rarer. The old
@@ -437,8 +437,8 @@
                 if (rng.chance(0.004)) ret = 100;
                 line = Math.min(100, ret);
                 text = line >= 100
-                    ? 'kickoff returned all the way for a touchdown by ' + game.teams[recv].name
-                    : 'kickoff returned to the ' + spot(line);
+                    ? 'kickoff returned all the way for a touchdown by ' + game.teams[recv].name + '.'
+                    : 'kickoff returned to ' + spot(line, recv, coachIdxOf(game)) + '.';
             }
         }
         game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
@@ -510,7 +510,35 @@
 
     // ---------- game state helpers ----------
 
-    function spot(ball) { return ball <= 50 ? 'own ' + ball : 'opponent ' + (100 - ball); }
+    // The team a human is coaching, or null when nobody is (the harness).
+    // The controller stamps autoCoach false on exactly one team; anything it
+    // has not touched leaves both undefined, which reads as nobody.
+    function coachIdxOf(game) {
+        if (game.teams[0].autoCoach === false) return 0;
+        if (game.teams[1].autoCoach === false) return 1;
+        return null;
+    }
+
+    // A yard line, spoken from the coach's side of the ball. nearIdx is the
+    // team that owns the half below fifty: the offense for a down and
+    // distance, the receiving team for a kickoff. With nobody coaching, the
+    // near half is "own", which is the offense-relative wording the harness
+    // has always printed. With a coach, "own" means his, so a kickoff his
+    // opponent returns to their twenty-five no longer reads as his own
+    // twenty-five (ISSUES.md, from play).
+    // One vocabulary, shared with controller.js's spotWords. It used to say
+    // "own 24" and "opponent 24" where the situation line said "our own 24"
+    // and "their 24", so a coach heard the same spot named two ways inside a
+    // single utterance: "second and nine at their twenty four" and then
+    // "second and nine at opponent twenty four".
+    function spot(ball, nearIdx, coachIdx) {
+        if (ball === 50) return 'midfield';
+        var near = ball < 50;
+        var mine = (coachIdx === null || coachIdx === undefined)
+            ? near
+            : (near ? nearIdx : 1 - nearIdx) === coachIdx;
+        return (mine ? 'our own ' : 'their ') + (near ? ball : 100 - ball);
+    }
 
     // Walking the offense back. The ball never goes past half the distance to
     // the goal line, and the line to gain moves only as far as the ball does,
@@ -804,7 +832,7 @@
         observeSnap(game, offIdx, res, deps, onOff, onDef);
 
         // Apply the result to the field
-        var described = describeBoth(res, PL);
+        var described = describeBoth(res, PL, { off: offIdx, coach: coachIdxOf(game) });
         var text = described.full;
         var td = false, turnover = false, safety = false;
         if (isTwoPoint) {
@@ -875,9 +903,9 @@
     // Two forms of the same snap. The full one carries the call and the
     // matchup events for a coach who wants the detail; the terse one is the
     // single line DESIGN.md 2 asks for. The interface picks between them.
-    function describeBoth(res, PL) {
-        var full = describe(res, PL);
-        var head = downLine(res) + ': ';
+    function describeBoth(res, PL, opts) {
+        var full = describe(res, PL, opts);
+        var head = downLine(res, opts) + ': ';
         var body = full.slice(head.length);
         var callEnd = body.indexOf('. ');
         var terseBody = callEnd >= 0 ? body.slice(callEnd + 2) : body;
@@ -886,14 +914,16 @@
         return { full: full, terse: head + terseBody };
     }
 
-    function downLine(res) {
+    function downLine(res, opts) {
+        opts = opts || {};
         return (res.sit.down === 1 ? '1st' : res.sit.down === 2 ? '2nd' : res.sit.down === 3 ? '3rd' : '4th') +
-               ' and ' + (res.sit.dist >= res.sit.ytg ? 'goal' : res.sit.dist) + ' at ' + spot(100 - res.sit.ytg);
+               ' and ' + (res.sit.dist >= res.sit.ytg ? 'goal' : res.sit.dist) +
+               ' at ' + spot(100 - res.sit.ytg, opts.off, opts.coach);
     }
 
-    function describe(res, PL) {
+    function describe(res, PL, opts) {
         var c = PL.CONCEPTS[res.concept], f = PL.FORMATIONS[res.formation];
-        var head = downLine(res) + ': ';
+        var head = downLine(res, opts) + ': ';
         var call = c.name + ' from ' + f.name + ' against ' + PL.COVERAGES[res.call.coverage].name + ', ' + PL.PRESSURES[res.call.pressure].say + (res.call.adjustment !== 'NONE' ? ', ' + PL.ADJUSTMENTS[res.call.adjustment].say : '') + '. ';
         var body;
         if (res.penalty && res.penalty.preSnap) body = 'Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards.';

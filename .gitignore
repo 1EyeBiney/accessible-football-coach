@@ -5,3 +5,6 @@ dev_data/
 .vscode/
 Thumbs.db
 desktop.ini
+
+# Per-machine Claude Code settings. The launch config below is shared.
+.claude/settings.local.json

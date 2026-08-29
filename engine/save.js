@@ -164,10 +164,12 @@
                 pending: c.pending, cued: c.cued, batched: c.batched,
                 log: c.log, halftimeDone: c.halftimeDone, over: c.over,
                 lastReport: c.lastReport, verbosity: c.verbosity,
+                hints: c.hints, pacing: c.pacing,
                 secondHalfPlan: c.secondHalfPlan, snapId: c.snapId,
                 suggestCache: c.suggestCache, lastFormation: c.lastFormation,
                 lastOffFormation: c.lastOffFormation, lastOffTeam: c.lastOffTeam,
-                lastDefFront: c.lastDefFront, decisions: c.decisions
+                lastDefFront: c.lastDefFront, lastRunFront: c.lastRunFront,
+                lastDefTeam: c.lastDefTeam, decisions: c.decisions
             })
         };
         return JSON.stringify(payload);
@@ -212,10 +214,12 @@
             pending: cc.pending, queue: [], cued: cc.cued, batched: cc.batched,
             log: cc.log, halftimeDone: cc.halftimeDone, over: cc.over,
             lastReport: cc.lastReport, verbosity: cc.verbosity,
+            hints: cc.hints || 'on', pacing: cc.pacing || 'medium',
             secondHalfPlan: cc.secondHalfPlan, game: g, snapId: cc.snapId,
             suggestCache: cc.suggestCache, lastFormation: cc.lastFormation,
             lastOffFormation: cc.lastOffFormation, lastOffTeam: cc.lastOffTeam,
-            lastDefFront: cc.lastDefFront,
+            lastDefFront: cc.lastDefFront, lastRunFront: cc.lastRunFront,
+            lastDefTeam: cc.lastDefTeam,
             decisions: cc.decisions || { coach: 0, staff: 0 },
             forcedOffense: null, forcedDefense: null, forcedSpecial: null,
             forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null
