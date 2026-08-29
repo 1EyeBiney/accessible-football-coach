@@ -654,6 +654,17 @@ module.exports = function (t) {
     t.ok(/they|look/i.test(zLine), 'and what it says is about the other team');
     t.ok(!/undefined/.test(zLine), 'Z never speaks undefined');
 
+    // S is the key that always has the play. Z just overwrote the C repeat
+    // buffer, which is exactly the situation the key exists for.
+    var ns = d20.count();
+    d20.key('s');
+    var sLine = d20.since(ns);
+    t.ok(sLine.length > 0, 'S answers after Z has spoken');
+    t.ok(/against|for |Incomplete|Sack|Penalty|kickoff|punt|field goal|Scramble|Thrown|Dropped/i.test(sLine),
+         'and what it says is football that happened, not a report about the other team');
+    d20.key('c');
+    t.ok(true, 'and C still repeats without throwing');
+
     // The same white-box guard Z shares with the defensive look: a unit seen
     // on the other side of a change of possession is not a look at this one.
     g20b.lastRunFront = 'NICKEL';
@@ -806,7 +817,7 @@ module.exports = function (t) {
     // description rather than the "does nothing here" fallback, because the
     // keyboard explorer is how a learner finds out what a key is for.
     var H = AF.help;
-    var GAME_KEYS = ['Tab', 'x', 'z', 'm', 't', 'b', 'r', ' ', 'o', 'e', 'g',
+    var GAME_KEYS = ['Tab', 'x', 'z', 's', 'm', 't', 'b', 'r', ' ', 'o', 'e', 'g',
                      'c', 'p', 'v', 'i', 'a', 'q', 'Escape', 'Enter', 'F1', 'F12'];
     GAME_KEYS.forEach(function (k) {
         var desc = H.getKeyDescription(k, false, false, 'game', null);

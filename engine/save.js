@@ -169,7 +169,8 @@
                 suggestCache: c.suggestCache, lastFormation: c.lastFormation,
                 lastOffFormation: c.lastOffFormation, lastOffTeam: c.lastOffTeam,
                 lastDefFront: c.lastDefFront, lastRunFront: c.lastRunFront,
-                lastDefTeam: c.lastDefTeam, decisions: c.decisions
+                lastDefTeam: c.lastDefTeam, seenOffFormation: c.seenOffFormation,
+                seenFront: c.seenFront, decisions: c.decisions
             })
         };
         return JSON.stringify(payload);
@@ -221,6 +222,7 @@
             lastOffFormation: cc.lastOffFormation, lastOffTeam: cc.lastOffTeam,
             lastDefFront: cc.lastDefFront, lastRunFront: cc.lastRunFront,
             lastDefTeam: cc.lastDefTeam,
+            seenOffFormation: cc.seenOffFormation || {}, seenFront: cc.seenFront || {},
             decisions: cc.decisions || { coach: 0, staff: 0 },
             forcedOffense: null, forcedDefense: null, forcedSpecial: null,
             forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null

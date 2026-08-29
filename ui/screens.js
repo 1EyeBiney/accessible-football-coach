@@ -822,6 +822,14 @@
         // X is your own setup; Z is theirs, which is the question a coach asks
         // once the play is over (ISSUES.md, from play).
         if (key.name === 'z') { say(app, C.opponentUnit(g), 'result'); return { say: 'theirs' }; }
+        // S says the last play again. C cannot do this job, because C repeats
+        // the last report and Z, X and Tab all overwrite it: a coach who
+        // checks anything after a play loses the play (ISSUES.md, from play).
+        if (key.name === 's') {
+            var act = C.lastAction ? C.lastAction(g) : null;
+            say(app, act || 'Nothing has happened yet.', 'result');
+            return { say: 'lastplay' };
+        }
         if (key.name === 'm') { say(app, C.matchups(g).join(' '), 'result', 'OC'); return { say: 'matchups' }; }
         if (key.name === 't') { say(app, C.tendencies(g), 'result', 'OC'); return { say: 'tendencies' }; }
         if (key.name === 'b') { cycleThreshold(app); return { say: 'reports' }; }

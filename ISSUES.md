@@ -7,6 +7,17 @@ An item marked "before next build" is fixed before any new feature work starts. 
 ## From play (Brian writes here)
 
 (Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Shift Tab reads the current seed on the game screen.)
+I was on defense with Riverton (shouldn't matter) and held the offense short of 1st down the first 3 downs so that the computer decided to punt, but I was not given any choices at all for 4th down, the computer once it decided to punt, just punted the ball. I would like the defense to decide on punt return, punt block or i guess other and be able to pick a defense if they think the defense is going for it. this would be something that needs done for 2-player mode anyway and is part of the real football game process so we need it in here too.
+
+likewise later, on a short 4th down, the computer decided to go for it rather than kick a fairly short field goal but I did not get to choose the defense, or FG block or FG safe or any choice, the computer once it decided to go for it, the play just ran.
+
+I was playing on OC only halts on decisions and after scoring a TD, the computer automatically chose to kick an extra point for me, as coach, I cshould be given the choice of PAT or 2-point conversion.
+
+all penalties should be coach choices as whether to accept or reject the penalty and we need to figure out how to do that like real coaches get with the information on what happens if the play stands and such.
+
+
+Thinking more abou the head coaching experience and what some users might want which would be to only have to make decisions at critical moments (like we have that option with O and E to cycle through coordinator involvemnt) but while the coordinators are doing that to be able to shift their priorities or tendencies if the human notices patterns. for example, during thehalftime report, I got info that the other team is concentrating on their X reciever and that they are focusing on our QB, which I"m guessig are tendencies noticed during the first half and report to em, but are they being taken avantage of? does the computer do the same and adjust? could the human have "sliders" or ways to encourage the coordinator to focus on the other team's RB in the 2nd half or during a key stretch or drive or just currently. This adds more head coaching strategy rather than play calling and is an optino some might want.
+
 
 
 ## Before next build
@@ -26,8 +37,6 @@ The defense seeing the offense's personnel and answering it with a substitution,
 ## Tuning
 
 The offensive line slides a position when one man is rested. offenseLineup fills its five slots from whoever is available rather than substituting into a specific slot, so benching the left tackle makes the left guard the left tackle, the center the left guard, and so on down the line. Real teams put a backup tackle at tackle. The position labels made this audible rather than causing it - eleven offensive players a game are called more than one thing, against 0.12 on defense where labels follow the depth chart - but fixing it changes which lineman blocks which defender and therefore the harness, so it wants a deliberate engine pass with the numbers run before and after. Found by the session 5 milestone review.
-
-Z says there is no look at their offense yet on the first snap of every new drive, even in the fourth quarter against a team you have watched all night. The guard behind it is right and deliberate: the stamps are per-possession, so Z can never report your own unit as theirs, which is the correctness rule of DESIGN.md 24.1. But your memory is not per-possession. The improvement is to report the last time you actually faced that unit, worded so it does not claim to be last snap ("the last time they had the ball" rather than "last snap"), which needs a small decision about how stale information should be presented before it is built. Found by the session 5 audit.
 
 The engine's defensive coordinator reads stale personnel for one snap after a turnover: buildSuggestion hands chooseDefense the personnel of whatever offense ran the last snap, which after a change of possession is the other team's. The spoken line was fixed in the whistle session (it now says there is no look yet), but the engine-side call still leans on the stale value. Fixing it changes what a seed replays, so it belongs in a deliberate engine pass with the harness run before and after, not a quick patch. Found by the session 3 audit; details in REVIEW_NOTES.md.
 
@@ -51,6 +60,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+The last play key, and Tab naming the possession (2026-08-29, from Brian's play notes). S says the last play again, with everything that followed it - the touchdown and the extra point ride along, because a coach asking for the last play after a score wants the score. It exists because C repeats the last report, and Z, X and Tab all overwrite that; S is the key that always has the play. Tab now names the possession outright - "Fairview ball, own eighteen" - so the yard line never has to be resolved through a pronoun; own and opponent are relative to the team just named. And Z now remembers across drives: on the first snap of a new possession it says "The last time they had the ball, they showed twenty one personnel from the I Formation", wording that never claims to be last snap, with "no look yet" reserved for a unit never faced at all. Commit: "Milestone 13: the last play, and where the ball is".
 
 How players are named in the play by play (2026-08-29, from conversation). Every player now has a spoken position, and the play by play says the position and the last name: "nose tackle Webb beat right guard Jones" where it used to say "Marcus Webb beat Terrell Jones". A cycles that to position only or name only, and says the last play again in whatever setting you just chose so you can hear the difference; name only gives the whole name, because fifty surnames are shared across the eighty men who dress and the last name alone produced "Fletcher beat Fletcher" about twice a game. On defense a position stays with a man all game, so it is something to learn him by; on offense it is the job on the field, so a back filling in while your starter rests really is called the running back while he is out there. The substitution list and your coordinators now speak the same vocabulary, from one table, rather than three. Also fixed in the same pass: the situation line said "three quarter" instead of "third quarter" in every game ever played, and six more log lines were running into the next sentence for want of a full stop, the touchdown into the extra point most often. Commit: "Milestone 12: how players are named".
 

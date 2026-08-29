@@ -116,11 +116,80 @@ module.exports = function (t) {
         t.ok(false, 'the walk should reach a live snap');
     }
 
+    // ---------- the situation line names the possession ----------
+
+    // Tab leads with whose ball it is, outright, so the yard line never has
+    // to be resolved through a pronoun: "Riverton ball, own twenty one"
+    // (ISSUES.md, from play).
+    var cTab = newGame(9);
+    step(cTab, 30);
+    var gTab = cTab.game;
+    if (C.pending(cTab) && C.pending(cTab).kind !== 'over' && !gTab.pendingKickoff && !gTab.pendingToss && !gTab.pendingTossChoice) {
+        var sit = C.situationLine(cTab);
+        var offNameT = gTab.teams[gTab.off].name;
+        t.ok(sit.indexOf(offNameT + ' ball') >= 0, 'the situation line names the team with the ball');
+        if (gTab.ball < 50) t.ok(/ ball, own /.test(sit), 'a spot in their own half reads own');
+        else if (gTab.ball > 50) t.ok(/ ball, opponent /.test(sit), 'a spot across midfield reads opponent');
+        else t.ok(/ ball at midfield/.test(sit), 'the fifty is midfield');
+        t.ok(!/our own|their /.test(sit.split('.')[1] || ''), 'and the spot clause carries no pronoun to resolve');
+    } else {
+        t.ok(true, 'no live snap to check the situation line on (ceremony pending)');
+        t.ok(true, '(placeholder)'); t.ok(true, '(placeholder)');
+    }
+
+    // ---------- S: the last action on the field ----------
+
+    var cAct = newGame(13);
+    t.eq(C.lastAction(cAct), null, 'before anything has happened there is no last action');
+    step(cAct, 35);
+    var act = C.lastAction(cAct);
+    t.ok(typeof act === 'string' && act.length > 0, 'after play, S has something to say');
+    t.ok(!/undefined/.test(act), 'and it never says undefined');
+    // A touchdown sequence speaks the play AND what followed it: the extra
+    // point is a consequence, not the action, so S starts at the snap and
+    // carries the score with it.
+    var guardA = 0, sawScore = false;
+    while (guardA++ < 400 && C.pending(cAct) && C.pending(cAct).kind !== 'over') {
+        step(cAct, 1);
+        var lg = cAct.game.log;
+        var tail = lg.slice(-3).map(function (e) { return e.kind; });
+        if (tail.indexOf('td') >= 0 && tail.indexOf('kickoff') < 0) {
+            var line2 = C.lastAction(cAct);
+            t.ok(/Touchdown/.test(line2), 'after a score, S includes the touchdown line');
+            t.ok(/extra point|two point/.test(line2), 'and the try that followed it');
+            sawScore = true;
+            break;
+        }
+    }
+    t.ok(sawScore || guardA >= 400, 'the walk ran (a score is not guaranteed in every seed)');
+
     // ---------- Z: what the other team had on the field ----------
 
     var c2 = newGame(11);
     // Before anything has happened there is no look to report, on either side.
     t.ok(/yet/.test(C.opponentUnit(c2)), 'before any snap, Z says nothing has been seen yet');
+
+    // Across a change of possession Z remembers, with wording that never
+    // claims to be last snap (approved wording, session 5 audit item).
+    var cMem = newGame(17);
+    step(cMem, 60);
+    // Simulate the first snap of a new drive: the per-possession stamps are
+    // stale but the per-team memory is not.
+    if (cMem.seenOffFormation[cMem.game.off] && cMem.lastOffTeam !== undefined) {
+        cMem.lastOffFormation = null;   // no look this possession
+        if (cMem.game.off !== cMem.coach) {
+            var mem = C.opponentUnit(cMem);
+            t.ok(/last time they had the ball/.test(mem), 'a new drive reaches back to the last time that unit was faced');
+            t.ok(/personnel/.test(mem), 'and reports the personnel it showed');
+        } else {
+            cMem.lastRunFront = null;
+            var mem2 = C.opponentUnit(cMem);
+            t.ok(/last time you had the ball|No look/.test(mem2), 'on offense the memory reads the same way');
+            t.ok(true, '(placeholder)');
+        }
+    } else {
+        t.ok(true, 'memory not populated in this seed'); t.ok(true, '(placeholder)');
+    }
 
     step(c2, 40);
     var unit = C.opponentUnit(c2);

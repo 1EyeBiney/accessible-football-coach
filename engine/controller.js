@@ -125,6 +125,10 @@
         c.game.teams[1 - c.coach].autoCoach = true;
         c.snapId = 0;
         c.suggestCache = {};
+        // Per-team memory of what each offense last showed and each defense
+        // last ran, for the Z key across changes of possession.
+        c.seenOffFormation = {};
+        c.seenFront = {};
         // The career's decision count (DESIGN_PROPOSALS.md proposal 4).
         c.decisions = { coach: 0, staff: 0 };
         // Before the toss there is no down and distance worth speaking.
@@ -288,8 +292,16 @@
         if (g.pendingKickoff) {
             return g.teams[g.pendingKickoff.kickIdx].name + ' kicking off. ' + scorePart;
         }
+        // The spot is spoken with the possession named outright - "Riverton
+        // ball, own twenty one" - because a pronoun makes the listener work
+        // out whose ball it is before the yard line means anything. Own and
+        // opponent are relative to the team just named, so there is nothing
+        // left to resolve (ISSUES.md, from play).
         var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
-        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball, g.off, c.coach) + '. ' + scorePart;
+        var offName = g.teams[g.off].name;
+        var spotPart = g.ball === 50 ? offName + ' ball at midfield'
+            : offName + ' ball, ' + (g.ball < 50 ? 'own ' + words(g.ball) : 'opponent ' + words(100 - g.ball));
+        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + '. ' + spotPart + '. ' + scorePart;
     }
 
     // Just the down, distance and spot, for the head of every call prompt.
@@ -350,19 +362,41 @@
     // formation is hidden until the line, and by now the coach has heard the
     // snap it was run on. Same guard as offenseShows either way - a look only
     // counts when it was a look at the unit the coach is facing now.
+    // When the look is not from this possession, Z remembers anyway: the
+    // stamps are per-possession so a unit seen before the turnover is never
+    // reported as this snap's, but the coach's memory is not per-possession,
+    // and "no look yet" in the fourth quarter against a team he has watched
+    // all night was a lie of omission. The wording never claims to be last
+    // snap (approved by Brian, session 5 audit item).
     function opponentUnit(c) {
         var PL = c.deps.plays, g = c.game;
         if (offenseIsCoach(c)) {
-            if (!c.lastRunFront || c.lastDefTeam !== 1 - g.off) return 'No look at their defense yet.';
-            var f = PL.FRONTS[c.lastRunFront];
-            return 'They were in ' + f.name + ': ' +
-                   words(f.dl) + ' linemen, ' + words(f.lb) + (f.lb === 1 ? ' linebacker, ' : ' linebackers, ') +
-                   words(f.db) + ' defensive backs.';
+            var seenF = c.seenFront && c.seenFront[1 - g.off];
+            if (c.lastRunFront && c.lastDefTeam === 1 - g.off) {
+                return 'They were in ' + frontSay(PL, c.lastRunFront) + '.';
+            }
+            if (seenF) return 'The last time you had the ball, they were in ' + frontSay(PL, seenF) + '.';
+            return 'No look at their defense yet.';
         }
-        if (!c.lastOffFormation || c.lastOffTeam !== g.off) return 'No look at their offense yet.';
-        var form = PL.FORMATIONS[c.lastOffFormation];
-        return 'Last snap they were in ' + form.name + ', ' +
-               words(Number(form.personnel)) + ' personnel: ' + form.say + '.';
+        var seenO = c.seenOffFormation && c.seenOffFormation[g.off];
+        if (c.lastOffFormation && c.lastOffTeam === g.off) {
+            var form = PL.FORMATIONS[c.lastOffFormation];
+            return 'Last snap they were in ' + form.name + ', ' +
+                   words(Number(form.personnel)) + ' personnel: ' + form.say + '.';
+        }
+        if (seenO) {
+            var form2 = PL.FORMATIONS[seenO];
+            return 'The last time they had the ball, they showed ' +
+                   words(Number(form2.personnel)) + ' personnel from the ' + form2.name + '.';
+        }
+        return 'No look at their offense yet.';
+    }
+
+    function frontSay(PL, front) {
+        var f = PL.FRONTS[front];
+        return f.name + ': ' + words(f.dl) + ' linemen, ' +
+               words(f.lb) + (f.lb === 1 ? ' linebacker, ' : ' linebackers, ') +
+               words(f.db) + ' defensive backs';
     }
 
     // ---------- suggestions (DESIGN.md 16.5) ----------
@@ -844,6 +878,11 @@
         // *suggested*; reporting that as what was on the field would be a
         // claim about the other team the coach never earned.
         if (res && res.call && res.call.front) { c.lastRunFront = res.call.front; c.lastDefTeam = 1 - offBefore; }
+        // And the per-team memory behind them, which survives changes of
+        // possession: what each team's offense last showed and each defense
+        // last ran, so Z can still answer on the first snap of a new drive.
+        if (res && res.formation) c.seenOffFormation[offBefore] = res.formation;
+        if (res && res.call && res.call.front) c.seenFront[1 - offBefore] = res.call.front;
         var spoken = [], li, entry, lineText;
         for (li = logBefore; li < g.log.length; li++) {
             entry = g.log[li];
@@ -1029,6 +1068,35 @@
         return null;
     }
 
+    // The most recent action on the field, for the S key: the last snap,
+    // kick, or punt, plus every consequence line that followed it - the
+    // touchdown, the extra point, the safety and its free kick, the
+    // turnover on downs. C cannot do this job, because C repeats the last
+    // report and Z, X and Tab all overwrite it: a coach who checks anything
+    // after a play loses the play (ISSUES.md, from play). Rendered through
+    // renderEntry so the naming and verbosity in force now apply.
+    //
+    // The extra point and the free kick are deliberately consequences, not
+    // actions: a coach asking for the last play after a touchdown wants the
+    // touchdown, not the kick that trailed it, so S starts at the snap and
+    // carries the whole scoring sequence with it.
+    var ACTION_KINDS = { play: true, kickoff: true, punt: true, fg: true };
+
+    function lastAction(c) {
+        var g = c.game, i, start = -1;
+        if (!g || !g.log) return null;
+        for (i = g.log.length - 1; i >= 0; i--) {
+            if (ACTION_KINDS[g.log[i].kind]) { start = i; break; }
+        }
+        if (start < 0) return null;
+        var parts = [];
+        for (i = start; i < g.log.length; i++) {
+            var line = renderEntry(c, g.log[i]);
+            if (line) parts.push(line);
+        }
+        return parts.length ? parts.join(' ') : null;
+    }
+
     function setHints(c, on) {
         c.hints = on === 'off' ? 'off' : 'on';
         return c.hints;
@@ -1067,7 +1135,8 @@
                 playClockSeconds: playClockSeconds, delayOfGame: delayOfGame,
                 setMode: setMode, setReportThreshold: setReportThreshold,
                 setVerbosity: setVerbosity, setHints: setHints, setPacing: setPacing,
-                setNaming: setNaming, NAMING: NAMING, lastPlayLine: lastPlayLine, final: final,
+                setNaming: setNaming, NAMING: NAMING, lastPlayLine: lastPlayLine,
+                lastAction: lastAction, final: final,
                 words: words, clockWords: clockWords, spotWords: spotWords, staminaWord: staminaWord };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
