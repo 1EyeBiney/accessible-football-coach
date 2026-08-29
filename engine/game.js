@@ -371,25 +371,75 @@
 
     // ---------- special teams (simple form, DESIGN.md 25) ----------
 
+    // A kickoff is no longer resolved where the score happened: it is
+    // deferred to the next step so the kicking and receiving sides can each
+    // be asked for a call first (deep, squib, pooch, or onside; regular
+    // return or hands team). Every old call site is unchanged; stepGame
+    // resolves the deferral before anything else. Headless games decide both
+    // calls deterministically, so the default path draws exactly what the
+    // old synchronous kickoff drew and a seed replays as before.
     function kickoff(game, kickIdx, deps) {
+        game.pendingKickoff = { kickIdx: kickIdx };
+    }
+
+    // A trailing team kicks onside when it is genuinely desperate: fourth
+    // quarter, inside four minutes, down by one to sixteen points. Both
+    // sidelines can read the same scoreboard, so the receiving side's hands
+    // team decision mirrors this with no belief model needed.
+    function onsideSituation(game, kickIdx) {
+        if (game.ot || game.quarter < 4 || game.clock > 240) return false;
+        var deficit = game.score[1 - kickIdx] - game.score[kickIdx];
+        return deficit >= 1 && deficit <= 16;
+    }
+
+    // kcall: DEEP | SQUIB | POOCH | ONSIDE. rcall: RETURN | HANDS.
+    function kickoffPlay(game, kickIdx, kcall, rcall, deps) {
         var rng = game.rng, P = deps.players;
         var K = kicker(game.teams[kickIdx], 'K', P);
         var leg = K ? P.eff(K, 'leg') : 40;
         var recv = 1 - kickIdx;
-        var pTB = clamp((leg - 35) * 0.02, 0.03, 0.7);
         var line, text;
-        if (rng.chance(pTB)) { line = RULES.HS.touchback; text = 'kickoff into the end zone, touchback'; }
-        else {
-            var ret = Math.round(clamp(rng.normal(24, 8), 3, 45));
-            // A long return is rare and a return for a score is rarer. The old
-            // form put one kickoff in fifty inside the opponent's half and
-            // narrated it as an ordinary return.
-            if (rng.chance(0.015)) ret = Math.round(rng.uniform(46, 70));
-            if (rng.chance(0.004)) ret = 100;
-            line = Math.min(100, ret);
-            text = line >= 100
-                ? 'kickoff returned all the way for a touchdown by ' + game.teams[recv].name
-                : 'kickoff returned to the ' + spot(line);
+        if (kcall === 'ONSIDE') {
+            // A real gamble with a real recovery rate: better against a
+            // regular return unit that is not expecting it, poor against a
+            // hands team sent on for exactly this.
+            var pRec = rcall === 'HANDS' ? 0.10 : 0.22;
+            if (rng.chance(pRec)) {
+                line = Math.round(clamp(rng.normal(52, 3), 46, 58));
+                text = 'onside kick, and ' + game.teams[kickIdx].name + ' recover it';
+                game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
+                game.clock = Math.max(0, game.clock - 4);
+                setPossession(game, kickIdx, line);
+                return;
+            }
+            line = Math.round(clamp(rng.normal(47, 4), 40, 55));
+            text = 'onside kick, recovered by ' + game.teams[recv].name;
+        } else if (kcall === 'SQUIB') {
+            // Short field position traded for no return and no disaster.
+            line = Math.round(clamp(rng.normal(35, 5), 25, 48));
+            text = 'squib kick, taken at the ' + spot(line);
+        } else if (kcall === 'POOCH') {
+            line = Math.round(clamp(rng.normal(22, 5), 12, 35));
+            text = 'pooch kick, fair caught at the ' + spot(line);
+        } else if (rcall === 'HANDS') {
+            // A hands team fielding a deep ball gives up the return game.
+            line = Math.round(clamp(rng.normal(15, 6), 3, 25));
+            text = 'kickoff against the hands team, brought out to the ' + spot(line);
+        } else {
+            var pTB = clamp((leg - 35) * 0.02, 0.03, 0.7);
+            if (rng.chance(pTB)) { line = RULES.HS.touchback; text = 'kickoff into the end zone, touchback'; }
+            else {
+                var ret = Math.round(clamp(rng.normal(24, 8), 3, 45));
+                // A long return is rare and a return for a score is rarer. The old
+                // form put one kickoff in fifty inside the opponent's half and
+                // narrated it as an ordinary return.
+                if (rng.chance(0.015)) ret = Math.round(rng.uniform(46, 70));
+                if (rng.chance(0.004)) ret = 100;
+                line = Math.min(100, ret);
+                text = line >= 100
+                    ? 'kickoff returned all the way for a touchdown by ' + game.teams[recv].name
+                    : 'kickoff returned to the ' + spot(line);
+            }
         }
         game.log.push({ q: game.quarter, clock: game.clock, team: kickIdx, kind: 'kickoff', text: text });
         game.clock = Math.max(0, game.clock - 5);
@@ -887,9 +937,81 @@
         deps.players.resetLive(home.roster); deps.players.resetLive(away.roster);
         resetBeliefs(home, deps, (hooks && hooks.homeScouting) || {});
         resetBeliefs(away, deps, (hooks && hooks.awayScouting) || {});
-        game.receivedFirst = rng.chance(0.5) ? 0 : 1;
-        kickoff(game, 1 - game.receivedFirst, deps);
+        // The coin toss is a step of its own now, resolved by the first call
+        // to stepGame, so a human coach can call it in the air and the winner
+        // can choose. Headless games make the same single draw the old code
+        // made here, with the same meaning, so a seed replays as before.
+        game.pendingToss = true;
+        game.pendingTossChoice = null;
+        game.pendingKickoff = null;
         return game;
+    }
+
+    function resolveToss(game, deps) {
+        var rng = game.rng;
+        game.pendingToss = false;
+        var call = game.hooks && game.hooks.coinToss ? game.hooks.coinToss(game) : null;
+        var flip = rng.chance(0.5);
+        if (!call) {
+            // Headless, or a fully delegated coach: winner takes the ball,
+            // which is exactly what the old startGame draw meant.
+            game.receivedFirst = flip ? 0 : 1;
+            game.log.push({ q: 1, clock: game.clock, kind: 'toss',
+                            text: game.teams[game.receivedFirst].name + ' win the toss and will receive' });
+            kickoff(game, 1 - game.receivedFirst, deps);
+            return null;
+        }
+        var coin = flip ? 'heads' : 'tails';
+        var team = call.team || 0;
+        if (call.call === coin) {
+            game.pendingTossChoice = { winner: team, coin: coin };
+            game.log.push({ q: 1, clock: game.clock, kind: 'toss',
+                            text: 'The coin comes up ' + coin + '. ' + game.teams[team].name + ' win the toss' });
+            return null;
+        }
+        // The other captain takes the ball, which is what a computer winner
+        // always chooses.
+        game.receivedFirst = 1 - team;
+        game.log.push({ q: 1, clock: game.clock, kind: 'toss',
+                        text: 'The coin comes up ' + coin + '. ' + game.teams[1 - team].name +
+                              ' win the toss and will receive' });
+        kickoff(game, team, deps);
+        return null;
+    }
+
+    function resolveTossChoice(game, deps) {
+        var tc = game.pendingTossChoice;
+        game.pendingTossChoice = null;
+        var pick = game.hooks && game.hooks.tossChoice ? game.hooks.tossChoice(game) : { choice: 'RECEIVE' };
+        var team = tc.winner;
+        if (pick.choice === 'RECEIVE') {
+            game.receivedFirst = team;
+            game.log.push({ q: 1, clock: game.clock, kind: 'toss',
+                            text: game.teams[team].name + ' will receive' });
+        } else {
+            // DEFER and KICK land in the same place for the opening: the
+            // other side takes the ball now. Deferring banks the choice for
+            // the second half, which receivedFirst already encodes.
+            game.receivedFirst = 1 - team;
+            game.log.push({ q: 1, clock: game.clock, kind: 'toss',
+                            text: pick.choice === 'DEFER'
+                                ? game.teams[team].name + ' defer to the second half'
+                                : game.teams[team].name + ' elect to kick' });
+        }
+        kickoff(game, 1 - game.receivedFirst, deps);
+        return null;
+    }
+
+    function resolveKickoff(game, deps) {
+        var ko = game.pendingKickoff;
+        game.pendingKickoff = null;
+        var kickIdx = ko.kickIdx, recv = 1 - kickIdx;
+        var kcall = game.hooks && game.hooks.kickoffKick ? game.hooks.kickoffKick(game, kickIdx)
+                  : (onsideSituation(game, kickIdx) ? 'ONSIDE' : 'DEEP');
+        var rcall = game.hooks && game.hooks.kickoffReceive ? game.hooks.kickoffReceive(game, recv)
+                  : (onsideSituation(game, kickIdx) ? 'HANDS' : 'RETURN');
+        kickoffPlay(game, kickIdx, kcall, rcall, deps);
+        return null;
     }
 
     function finish(game) {
@@ -903,6 +1025,11 @@
     function stepGame(game, deps) {
         if (game.finished) return null;
         if (game.guard++ > 1500) { finish(game); return null; }
+        // The deferred ceremonies, each a step of its own so the interface
+        // can ask its question and speak the answer between them.
+        if (game.pendingToss) return resolveToss(game, deps);
+        if (game.pendingTossChoice) return resolveTossChoice(game, deps);
+        if (game.pendingKickoff) return resolveKickoff(game, deps);
         if (game.ot) return otStep(game, deps);
         if (game.clock <= 0) {
             game.quarter++;
@@ -1013,7 +1140,8 @@
                 fourthDownDecision: fourthDownDecision, fourthDownConfidence: fourthDownConfidence,
                 otFourthDownDecision: otFourthDownDecision, setPossession: setPossession, step: step,
                 startGame: startGame, stepGame: stepGame, covBucket: covBucket,
-                kickoff: kickoff, punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
+                kickoff: kickoff, kickoffPlay: kickoffPlay, onsideSituation: onsideSituation,
+                punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
     root.AF.game = api;

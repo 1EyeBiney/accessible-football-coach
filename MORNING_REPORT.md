@@ -1,12 +1,20 @@
 # Morning report
 
-Written August 28, 2026, after the session that worked through your play notes live. Plain prose, as always. The first section is what is new to your ears; the rest is what happened and what is parked.
+Written August 29, 2026, after the coin toss milestone. Plain prose, as always. The first section is what is new to your ears; the rest is what happened and what is parked.
 
-## What to open
+## The coin toss and the kickoff
 
-Open index.html and press Enter on the button, same as always. Nothing about getting into a game has changed. Three things are new once you are playing.
+The game no longer starts itself. After the pre-game screen you hear "The teams are on the field," the whistle, and then the captains meet at midfield: H calls heads, T calls tails, while the coin is in the air. Win it and you hear "You win the toss. Take the ball." - Enter takes it, F offers deferring to the second half or kicking off. Lose it and they take the ball, like a computer captain always will.
 
-## The whistle
+Then the kickoff itself is a call, both directions. Kicking, Enter takes the deep kick and F offers a squib, a pooch, or an onside kick. Receiving, Enter takes the regular return and F offers the hands team. In full control you are asked at every kickoff; hand a side to your coordinator with the stop-me setting and he only stops you when an onside kick is genuinely in play - fourth quarter, inside four minutes, one score or two down - which is also exactly when the computer coach will try one against you, so listen for the hands team recommendation late in a close game. An onside kick is a real gamble: about one in five against a regular return unit, half that against a hands team.
+
+Defend-an-end is deliberately missing from the toss. The engine has no wind for it to mean anything, and a choice that changes nothing is a lie; it is written down for the day an elements model exists.
+
+## Also new under the hood
+
+The game now counts, quietly, how many decisions you made yourself against how many your staff made for you - the seed of the career scoring we agreed on from proposal 4. Nothing announces it yet; it rides through saves and waits for the career milestones.
+
+## The whistle, from the previous build and still fresh
 
 After every play, you now hear the result as its own utterance, then one of your eight referee whistles, then the next suggestion as a separate utterance. The whistle is the ready-for-play whistle: everything before it belongs to the play that just happened, everything after it belongs to the next one. No two whistles repeat until all eight have been heard, and which one plays is chosen outside the game's seed, so replays are untouched. The play clock, when you have it on, now starts at the whistle, like real football.
 
@@ -28,8 +36,8 @@ Two changes worth hearing, both from the auditor rather than from your notes. Le
 
 ## What is parked, by your own call
 
-The coin toss and kickoff milestone is agreed in shape and written into ISSUES.md: you call heads or tails as the visitor, the winner chooses receive, kick, defer, or an end, and both sides pick a real kickoff call, with onside kicks riding along. Not started yet. The designated target mechanic stays parked from last session. A possible future clause where your offensive coordinator reads the defensive shell aloud at full verbosity is written down but deliberately left out of this pass, since T already gives you tendencies on demand.
+The designated target mechanic stays parked from session two. The OC shell-read clause and defend-an-end at the toss are written down in ISSUES.md's Not started. Intent calling and the career accounting from proposal 4 wait for the career milestones; only their seed, the decision count, is live.
 
 ## Where everything is written down
 
-PROGRESS.md has the session 3 entry, including the reasoning ported from your accessible golf audio engine. ISSUES.md moved the whistle, the seed key, and the defensive look to Done. CHANGELOG.md is at 0.4.0. REVIEW_NOTES.md has the accessibility auditor's pass over the new whistle timing. The project is now on GitHub at github.com/1EyeBiney/accessible-football-coach, public, and pushes happen with the work now, per your instruction.
+PROGRESS.md has the session entries in order. ISSUES.md moved the coin toss and kickoff to Done. CHANGELOG.md is at 0.5.0. REVIEW_NOTES.md has every reviewer pass. DESIGN.md carries status notes under 8.4 (the toss and kickoff as built) and 22 (proposal 4 accepted). Everything is committed and pushed to github.com/1EyeBiney/accessible-football-coach.

@@ -49,6 +49,9 @@ function driveOne(c) {
     else if (p.kind === 'substitution') { C.answerSubstitution(c, 'yes'); }
     else if (p.kind === 'halftime') { var h = C.halftime(c); C.halftimeChoice(c, h.choices[0].id); }
     else if (p.kind === 'special') { var sp = C.specialTeamsChoices(c); C.callSpecial(c, sp.recommendation.toUpperCase()); }
+    else if (p.kind === 'cointoss') { C.callToss(c, true); }
+    else if (p.kind === 'tosschoice') { C.callTossChoice(c, C.tossChoices(c).recommendation); }
+    else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
     else if (p.kind === 'auto') { C.advance(c); }
     C.reports(c); // drain like the interface would, so nothing piles up
     return p.kind;

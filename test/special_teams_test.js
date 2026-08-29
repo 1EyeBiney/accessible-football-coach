@@ -45,6 +45,9 @@ function driveToSpecial(c, guardMax) {
         else if (p.kind === 'defense') { var d = C.suggestion(c, 'defense'); C.callDefense(c, d.call); }
         else if (p.kind === 'substitution') { C.answerSubstitution(c, 'yes'); }
         else if (p.kind === 'halftime') { var h = C.halftime(c); C.halftimeChoice(c, h.choices[0].id); }
+        else if (p.kind === 'cointoss') { C.callToss(c, true); }
+        else if (p.kind === 'tosschoice') { C.callTossChoice(c, C.tossChoices(c).recommendation); }
+        else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
         else if (p.kind === 'auto') { C.advance(c); }
         C.reports(c);
     }
@@ -113,6 +116,9 @@ module.exports = function (t) {
         else if (pp.kind === 'substitution') { C.answerSubstitution(opp, 'yes'); }
         else if (pp.kind === 'halftime') { var h2 = C.halftime(opp); C.halftimeChoice(opp, h2.choices[0].id); }
         else if (pp.kind === 'special') { var sp2 = C.specialTeamsChoices(opp); C.callSpecial(opp, sp2.recommendation.toUpperCase()); }
+        else if (pp.kind === 'cointoss') { C.callToss(opp, true); }
+        else if (pp.kind === 'tosschoice') { C.callTossChoice(opp, C.tossChoices(opp).recommendation); }
+        else if (pp.kind === 'kickoff') { C.callKickoff(opp, C.kickoffChoices(opp).recommendation); }
         else if (pp.kind === 'auto') { C.advance(opp); }
         C.reports(opp);
     }

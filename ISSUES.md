@@ -8,8 +8,6 @@ An item marked "before next build" is fixed before any new feature work starts. 
 
 (Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Shift Tab reads the current seed on the game screen.)
 
-After selecting the program, we should basically be entering game mode and for now, let's just have the human be the visitor and be given the choice to call for heads or tails. we need to build that coin toss into the game and have the player get the take ball, defend end choice like real football does, have that coin flip and then go into kickoff. I would expect at that point to call my kickoff or receiving formations. I do not know what current football levels do for kickoffs but let's try and be authentic.
-
 
 ## Before next build
 
@@ -17,9 +15,7 @@ After selecting the program, we should basically be entering game mode and for n
 
 ## Not started
 
-The coin toss and kickoff milestone, agreed 2026-08-28: the human calls heads or tails as the visitor, the winner chooses receive, kick, defer, or an end to defend, and the kicking and receiving sides each pick a real kickoff call (deep, squib, pooch, onside for the kicking team; regular return or hands team for the receiving one). This absorbs the older item below.
-
-Onside kicks, and a suggest-and-accept moment around the kickoff itself. The fourth-down half of DESIGN.md 8.4 is built (see Done, below); kickoffs still run automatically. See DESIGN_PROPOSALS.md proposal 3 for why this was split off rather than built the same night: it needs a real recovery-rate mechanic, not a UI wrapper around something the engine already does.
+Defend-an-end at the toss. The real toss offers a winner the choice of which goal to defend; the engine has no wind, weather, or field direction for that choice to mean anything yet, so it is deliberately not offered (a choice that changes nothing would be dishonest). If an elements model ever arrives, the toss flow has the natural slot for it.
 
 The OC shell-read clause: at full verbosity on offense, when the offensive coordinator has a confident read of the defensive shell, one short clause in the suggestion line about what they are showing, filtered through his belief store so a bad staff can be wrong about it (DESIGN.md 24.1). Deliberately deferred from the 2026-08-28 reported-information pass to keep it conservative; the T key already gives tendencies on demand.
 
@@ -47,6 +43,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+The coin toss and the kickoff (2026-08-29, from Brian's play notes). Every game opens with the toss: call it in the air with H or T, and a winner chooses receive, defer, or kick, in the same Enter-accepts, F-for-more grammar as everything else. Every kickoff is then a call: deep, squib, pooch, or onside kicking; regular return or hands team receiving; gated by offenseMode like the fourth down, with the coordinator only stopping a KEY-mode coach when an onside kick is genuinely in play. Onside kicks have a real recovery mechanic (about one in five against a return unit, half that against a hands team), and the computer coach uses the same desperation window honestly on both sides. The engine defers every kickoff to its own step, so the old synchronous call sites are untouched and a seed replays as before; the controller also now counts coach-made against staff-made decisions per game, the accepted seed of DESIGN_PROPOSALS.md proposal 4. Defend-an-end is deliberately not offered (see Not started). Commit: "Milestone 10: the coin toss and the kickoff".
 
 Whistle timing and the call prompt's shape (2026-08-28, from Brian's first listen). The whistle fires at half the pacing estimate so it lands on the announcement's tail instead of after a dead gap; every call prompt is now down and distance, a short synthesised set tone with an exactly known length, then the look and the suggestion. Commit: "Milestone 9a: whistle timing and the call prompt".
 

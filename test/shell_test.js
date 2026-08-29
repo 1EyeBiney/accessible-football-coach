@@ -147,6 +147,7 @@ module.exports = function (t) {
     // ---------- play a whole game through the shell ----------
     var guard = 0, called = 0, answered = 0, viewersOpened = 0;
     while (d.app.state.mode !== 'final' && guard++ < 6000) {
+        if (d.app.step === 'toss-call') { d.key('h'); continue; }
         var step = d.app.step;
         if (d.app.state.viewer) {
             // Walk into a viewer, take something from it, and leave. The
@@ -242,6 +243,7 @@ module.exports = function (t) {
     // Get to an offense prompt.
     var g2 = 0;
     while (d4.app.step !== 'offense-suggest' && g2++ < 400) {
+        if (d4.app.step === 'toss-call') { d4.key('h'); continue; }
         if (d4.app.step === 'advance') d4.key('Enter');
         else if (d4.app.step === 'sub-answer') d4.key('n');
         else if (d4.app.step === 'defense-suggest') d4.key('Enter');
@@ -273,6 +275,7 @@ module.exports = function (t) {
     d5.key('Enter').key('Enter').key('Enter');
     var g3 = 0;
     while (d5.app.step !== 'offense-suggest' && g3++ < 400) {
+        if (d5.app.step === 'toss-call') { d5.key('h'); continue; }
         if (d5.app.step === 'sub-answer') d5.key('n');
         else d5.key('Enter');
     }
@@ -306,6 +309,7 @@ module.exports = function (t) {
     d6.key('Enter').key('Enter').key('Enter');
     var g4 = 0;
     while (d6.app.game.log.length < 3 && g4++ < 400) {
+        if (d6.app.step === 'toss-call') { d6.key('h'); continue; }
         if (d6.app.state.viewer) d6.key('Escape');
         else if (d6.app.step === 'sub-answer') d6.key('n');
         else d6.key('Enter');
@@ -338,6 +342,7 @@ module.exports = function (t) {
     d8.key('Enter').key('Enter').key('Enter');
     var g5 = 0, hitGate = false;
     while (g5++ < 3000 && d8.app.state.mode !== 'final') {
+        if (d8.app.step === 'toss-call') { d8.key('h'); continue; }
         if (d8.app.step === 'sub-answer') {
             n = d8.count();
             d8.key('Escape');
@@ -359,6 +364,7 @@ module.exports = function (t) {
     d9.key('Enter').key('Enter').key('Enter');   // new game, first team, kick off
     var g6 = 0;
     while (d9.app.game.log.length < 5 && g6++ < 400) {
+        if (d9.app.step === 'toss-call') { d9.key('h'); continue; }
         if (d9.app.state.viewer) { d9.key('Escape'); continue; }
         if (d9.app.step === 'sub-answer') { d9.key('n'); continue; }
         d9.key('Enter');
@@ -390,6 +396,7 @@ module.exports = function (t) {
     // Playing on from the load reaches a real final, the same as any game.
     var g7 = 0;
     while (d10.app.state.mode !== 'final' && g7++ < 6000) {
+        if (d10.app.step === 'toss-call') { d10.key('h'); continue; }
         if (d10.app.state.viewer) { d10.key('Escape'); continue; }
         if (d10.app.step === 'sub-answer') { d10.key('n'); continue; }
         d10.key('Enter');
@@ -402,6 +409,7 @@ module.exports = function (t) {
     d11.key('Enter').key('Enter').key('Enter');
     var g8 = 0;
     while (d11.app.game.log.length < 3 && g8++ < 400) {
+        if (d11.app.step === 'toss-call') { d11.key('h'); continue; }
         if (d11.app.state.viewer) { d11.key('Escape'); continue; }
         if (d11.app.step === 'sub-answer') { d11.key('n'); continue; }
         d11.key('Enter');
@@ -433,6 +441,7 @@ module.exports = function (t) {
     d14.key('Enter').key('Enter').key('Enter');
     var g9 = 0;
     while (d14.app.state.mode !== 'final' && g9++ < 6000) {
+        if (d14.app.step === 'toss-call') { d14.key('h'); continue; }
         if (d14.app.state.viewer) { d14.key('Escape'); continue; }
         if (d14.app.step === 'sub-answer') { d14.key('n'); continue; }
         if (d14.app.state.mode === 'halftime') { d14.key('Enter'); continue; }
@@ -455,6 +464,7 @@ module.exports = function (t) {
     d16.key('Enter').key('Enter').key('Enter');
     var g10 = 0;
     while (d16.app.step !== 'special-suggest' && d16.app.state.mode !== 'final' && g10++ < 6000) {
+        if (d16.app.step === 'toss-call') { d16.key('h'); continue; }
         if (d16.app.state.viewer) { d16.key('Escape'); continue; }
         if (d16.app.step === 'sub-answer') { d16.key('n'); continue; }
         if (d16.app.state.mode === 'halftime') { d16.key('Enter'); continue; }
@@ -488,6 +498,7 @@ module.exports = function (t) {
     d17.key('Enter').key('Enter').key('Enter');
     var g11 = 0;
     while (d17.app.step !== 'special-suggest' && d17.app.state.mode !== 'final' && g11++ < 6000) {
+        if (d17.app.step === 'toss-call') { d17.key('h'); continue; }
         if (d17.app.state.viewer) { d17.key('Escape'); continue; }
         if (d17.app.step === 'sub-answer') { d17.key('n'); continue; }
         if (d17.app.state.mode === 'halftime') { d17.key('Enter'); continue; }
@@ -508,6 +519,7 @@ module.exports = function (t) {
     d18.key('Enter').key('Enter').key('Enter');
     var g12 = 0;
     while (d18.app.step !== 'special-suggest' && d18.app.state.mode !== 'final' && g12++ < 6000) {
+        if (d18.app.step === 'toss-call') { d18.key('h'); continue; }
         if (d18.app.state.viewer) { d18.key('Escape'); continue; }
         if (d18.app.step === 'sub-answer') { d18.key('n'); continue; }
         if (d18.app.state.mode === 'halftime') { d18.key('Enter'); continue; }
@@ -539,11 +551,21 @@ module.exports = function (t) {
     d19.key('Enter').key('Enter').key('Enter');
     t.ok(events.indexOf('[boundary whistle]') >= 0, 'entering the game places a whistle boundary before the first prompt');
 
+    // T means tails at the toss, not tendencies: the review caught the info
+    // key eating the documented toss call, so the regression test presses T,
+    // never H.
+    t.eq(d19.app.step, 'toss-call', 'the game opens at the toss call');
+    var nT = d19.count();
+    d19.key('t');
+    t.ok(!d19.app.game.game.pendingToss, 'T calls tails and the toss resolves');
+    t.ok(d19.since(nT).indexOf('comes up') >= 0, 'and the coin is announced');
+
     // Play a stretch of snaps; every one that produced a result and a next
     // prompt must have the chain: result, whistle boundary, down and
     // distance, set boundary, then the rest of the prompt.
     var g19 = 0, sawSnap = false;
     while (d19.app.state.mode === 'game' && g19++ < 120) {
+        if (d19.app.step === 'toss-call') { d19.key('h'); continue; }
         events.length = 0;
         if (d19.app.state.viewer) { d19.key('Escape'); continue; }
         if (d19.app.step === 'sub-answer') { d19.key('n'); continue; }
@@ -581,6 +603,7 @@ module.exports = function (t) {
     d20.key('Enter').key('Enter').key('Enter');
     var g20 = 0, sawDefLook = false;
     while (d20.app.state.mode === 'game' && g20++ < 400) {
+        if (d20.app.step === 'toss-call') { d20.key('h'); continue; }
         if (d20.app.state.viewer) { d20.key('Escape'); continue; }
         if (d20.app.step === 'sub-answer') { d20.key('n'); continue; }
         if (d20.app.state.mode === 'halftime') { d20.key('Enter'); continue; }

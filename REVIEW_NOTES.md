@@ -107,3 +107,27 @@ An exception inside a key handler leaves the timers dead until the next keypress
 AF.main.restart reuses start() without resetting the whistle generation or in-flight continuations. Nothing calls restart today. Logged so whoever wires a caller to it reads this first.
 
 The auditor also noted that main.js has no Node coverage at all, so the whistle sequencing, the generation counter, and both play clock expiry branches rest on reading and on the browser pass rather than on the suite. True, and worth a harness for the timers eventually; the queue segmentation and the boundary placement that decide what is spoken are covered, at 367 checks.
+
+## Milestone reviewer, session 4, after the coin toss and the kickoff
+
+The reviewer read the deferral refactor in engine/game.js, the new pending kinds and the decision counter in engine/controller.js, the save fields, and the new interface steps, and traced the rng stream, the dead-end states, the overtime and halftime edges, and what each new resolution speaks. Eight findings, six real. All six were fixed the same session; the two theoretical ones are recorded below.
+
+### Fixed
+
+T at the toss called up the coordinator's tendencies instead of calling tails. The info keys in gameKey run before the step dispatch, so the very first documented interaction of a game half-worked: H called heads, T talked about coverages and left the toss pending. The toss keys now run first on that step, and the shell suite's regression presses T, never H, since every driver pressing only H is exactly how this stayed invisible.
+
+A kickoff returned for a touchdown spoke only the extra point. The controller spoke one log line per step, and a step that logs several things - the return, the score, the try - dropped everything but the last. This predates the milestone (an ordinary touchdown also spoke only its extra point) but the return made it new and loud: a seven-point swing with no word of how. Every log entry a step produces is now spoken in order, with terse forms still applying per entry.
+
+The decision counter dropped every punt and field goal, coach-called or not, because those resolve without a snap result and the counter only looked at snaps and kickoffs. A career tally that counts "go for it" but not the punt the same key answered grades identical fourth downs differently by their answer. Fourth-down steps on the coach's possession now count regardless of how they resolved, with a quarter guard so a clock rollover at a stale fourth down counts as nobody's decision.
+
+Tab and Escape during the ceremonies fabricated a possession: "second and goal, ball on their zero" while a kickoff was pending after a touchdown, and the untouched opening state before the toss. The situation line now says who is kicking off, or that the toss is still to come, with the quarter, clock and score that are genuinely true.
+
+Escape on the new steps had no context line, so a coach who backed out of a kickoff prompt heard the situation and nothing about what was being asked. The context line now carries the toss call keys and the pending recommendation, the same as every other suggest step.
+
+A score at zero on the clock deferred a kickoff nobody would play after, and the milestone turned that dead kick into a question - at the end of the second quarter the coach called a kickoff and then immediately got halftime and the real one. A kickoff with no time on the clock is never asked now; it resolves silently, which is what the old synchronous code always did.
+
+### Left, with reasons
+
+The kickoff gate uses offenseMode for both the kick and the receive call, so a coach with offense delegated and defense in hand is not asked about the hands team even in an onside window against him. This follows the fourth-down precedent deliberately - a kickoff is about possession, and the receiving team is the offense about to be - but the reviewer is right that a defense-minded coach might see it the other way. Written down rather than changed; if it grates in play it is a one-line gate.
+
+The reviewer also listed coverage that still does not exist: nothing compares a fully delegated controller game against headless playGame for the same seed (the cheapest guard against controller-versus-headless drift), and nothing asserts what a kickoff-return touchdown speaks. The first is worth writing when the controller is next touched; the fixed speaking bug makes the second less urgent.

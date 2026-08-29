@@ -152,7 +152,9 @@
                     drivePlays: g.drivePlays, ot: g.ot, hunchLog: g.hunchLog,
                     finished: g.finished, final: g.final,
                     otRound: g.otRound, otIndex: g.otIndex, otFirst: g.otFirst,
-                    guard: g.guard, receivedFirst: g.receivedFirst
+                    guard: g.guard, receivedFirst: g.receivedFirst,
+                    pendingToss: g.pendingToss, pendingTossChoice: g.pendingTossChoice,
+                    pendingKickoff: g.pendingKickoff
                 }),
                 rng: { seed: g.rng.seed, state: g.rng.state }
             },
@@ -165,7 +167,7 @@
                 secondHalfPlan: c.secondHalfPlan, snapId: c.snapId,
                 suggestCache: c.suggestCache, lastFormation: c.lastFormation,
                 lastOffFormation: c.lastOffFormation, lastOffTeam: c.lastOffTeam,
-                lastDefFront: c.lastDefFront
+                lastDefFront: c.lastDefFront, decisions: c.decisions
             })
         };
         return JSON.stringify(payload);
@@ -196,7 +198,10 @@
             hooks: null, drivePlays: rest.drivePlays, ot: rest.ot,
             S: deps.staff, hunchLog: rest.hunchLog, finished: rest.finished, final: rest.final,
             otRound: rest.otRound, otIndex: rest.otIndex, otFirst: rest.otFirst,
-            guard: rest.guard, receivedFirst: rest.receivedFirst
+            guard: rest.guard, receivedFirst: rest.receivedFirst,
+            pendingToss: rest.pendingToss || false,
+            pendingTossChoice: rest.pendingTossChoice || null,
+            pendingKickoff: rest.pendingKickoff || null
         };
 
         var cc = untagWalk(payload.controller, byId);
@@ -211,7 +216,9 @@
             suggestCache: cc.suggestCache, lastFormation: cc.lastFormation,
             lastOffFormation: cc.lastOffFormation, lastOffTeam: cc.lastOffTeam,
             lastDefFront: cc.lastDefFront,
-            forcedOffense: null, forcedDefense: null, forcedSpecial: null
+            decisions: cc.decisions || { coach: 0, staff: 0 },
+            forcedOffense: null, forcedDefense: null, forcedSpecial: null,
+            forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null
         };
         g.controller = c;
         return c;

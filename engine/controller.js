@@ -94,7 +94,11 @@
         c.game.teams[1 - c.coach].autoCoach = true;
         c.snapId = 0;
         c.suggestCache = {};
-        say(c, situationLine(c), 'result', null);
+        // The career's decision count (DESIGN_PROPOSALS.md proposal 4).
+        c.decisions = { coach: 0, staff: 0 };
+        // Before the toss there is no down and distance worth speaking.
+        if (c.game.pendingToss) say(c, 'The teams are on the field.', 'result', null);
+        else say(c, situationLine(c), 'result', null);
         c.pending = nextPending(c);
         return c;
     }
@@ -144,7 +148,31 @@
         if (c.over) return { kind: 'over' };
         var must = takeMust(c);
         if (must) return { kind: 'substitution', hunch: must };
+        // The opening ceremonies and every kickoff (DESIGN.md 8.4, ISSUES.md
+        // 2026-08-28). The toss is asked once and always: it is the coach's
+        // moment whatever his delegation settings. Kickoff calls are gated
+        // like the fourth down: always in full control, only when the
+        // decision genuinely matters (an onside window) when the coordinator
+        // stops him for the big ones, never when everything is delegated.
+        if (c.game.pendingToss) return { kind: 'cointoss' };
+        if (c.game.pendingTossChoice) return { kind: 'tosschoice' };
+        // The halftime briefing comes before the second-half kickoff call.
         if (c.game.quarter === 3 && !c.halftimeDone) return { kind: 'halftime' };
+        if (c.game.pendingKickoff) {
+            // A kickoff deferred by a score at zero on the clock still runs,
+            // but nobody plays after it, so it is never worth a question
+            // (found by the milestone review: the old synchronous code ran
+            // the same dead kick silently).
+            if (c.game.clock <= 0) return { kind: 'auto', reason: 'kickoff' };
+            var ki = c.game.pendingKickoff.kickIdx;
+            var kside = ki === c.coach ? 'kick' : 'receive';
+            var kmode = c.offenseMode;
+            if (kmode === 'COORD') return { kind: 'auto', reason: 'kickoff' };
+            if (kmode === 'KEY' && !c.deps.game.onsideSituation(c.game, ki)) {
+                return { kind: 'auto', reason: 'kickoff' };
+            }
+            return { kind: 'kickoff', side: kside };
+        }
         if (victoryFormationComing(c)) return { kind: 'auto', reason: 'victory formation' };
         if (c.game.down === 4) {
             // Not the coach's ball: the automatic coach's fourth-down call is
@@ -188,14 +216,25 @@
     function situationLine(c) {
         var g = c.game;
         var us = g.teams[c.coach].name, them = g.teams[1 - c.coach].name;
-        var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
         // Only call it overtime when it actually is overtime. The quarter
         // counter runs past four at the end of regulation whether the game is
         // tied or not.
         var qtr = g.ot ? 'overtime' : (words(Math.min(4, g.quarter)) + ' quarter');
-        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball) + '. ' +
-               qtr + ', ' + clockWords(g.clock) + '. ' +
+        var scorePart = qtr + ', ' + clockWords(g.clock) + '. ' +
                us + ' ' + words(g.score[c.coach]) + ', ' + them + ' ' + words(g.score[1 - c.coach]) + '.';
+        // Between plays of the ordinary kind, down and distance are real.
+        // During the ceremonies they are stale leftovers - the ball past the
+        // goal line after a touchdown, the untouched opening state before
+        // the toss - and speaking them fabricates a possession that does not
+        // exist (found by the milestone review).
+        if (g.pendingToss || g.pendingTossChoice) {
+            return 'Before the kickoff. ' + scorePart;
+        }
+        if (g.pendingKickoff) {
+            return g.teams[g.pendingKickoff.kickIdx].name + ' kicking off. ' + scorePart;
+        }
+        var toGo = g.dist >= (100 - g.ball) ? 'goal' : words(g.dist);
+        return ORDINAL[Math.min(4, g.down)] + ' and ' + toGo + ', ball on ' + spotWords(g.ball) + '. ' + scorePart;
     }
 
     // Just the down, distance and spot, for the head of every call prompt.
@@ -390,6 +429,80 @@
         return advance(c);
     }
 
+    // ---------- the toss and the kickoff (DESIGN.md 8.4, ISSUES.md 2026-08-28) ----------
+
+    function callToss(c, heads) {
+        if (!c.game.pendingToss) return fail(c, 'There is no toss to call.');
+        c.forcedToss = { call: heads ? 'heads' : 'tails', team: c.coach };
+        return advance(c);
+    }
+
+    var TOSS_OPTIONS = [
+        { id: 'RECEIVE', text: 'Take the ball.' },
+        { id: 'DEFER', text: 'Defer to the second half.' },
+        { id: 'KICK', text: 'Kick off.' }
+    ];
+
+    function tossChoices(c) {
+        return { recommendation: 'RECEIVE',
+                 text: 'You win the toss. Take the ball.',
+                 options: TOSS_OPTIONS.slice() };
+    }
+
+    function callTossChoice(c, id) {
+        if (!c.game.pendingTossChoice) return fail(c, 'There is no toss choice to make.');
+        var ok = TOSS_OPTIONS.some(function (o) { return o.id === id; });
+        if (!ok) return fail(c, 'That is not a toss choice.');
+        c.forcedTossChoice = { choice: id };
+        return advance(c);
+    }
+
+    var KICK_OPTIONS = [
+        { id: 'DEEP', text: 'Kick it deep.' },
+        { id: 'SQUIB', text: 'Squib kick. No return, but they start in better field position.' },
+        { id: 'POOCH', text: 'Pooch kick. High and short, fair caught, no return.' },
+        { id: 'ONSIDE', text: 'Onside kick. A real gamble to keep the ball.' }
+    ];
+    var RECEIVE_OPTIONS = [
+        { id: 'RETURN', text: 'Regular return.' },
+        { id: 'HANDS', text: 'Hands team, in case they kick onside. It costs you the return game.' }
+    ];
+
+    // The kicking or receiving call, in the fourth-down grammar: a
+    // recommendation with plain wording, Enter accepts, F for the list.
+    // Deterministic, like specialTeamsChoices: the situational math draws
+    // from nothing.
+    function kickoffChoices(c) {
+        var g = c.game, GM = c.deps.game;
+        if (!g.pendingKickoff) return null;
+        var ki = g.pendingKickoff.kickIdx;
+        var onside = GM.onsideSituation(g, ki);
+        if (ki === c.coach) {
+            return { side: 'kick',
+                     recommendation: onside ? 'ONSIDE' : 'DEEP',
+                     text: onside ? 'You need the ball back. Onside kick.' : 'Kick it deep.',
+                     options: KICK_OPTIONS.slice() };
+        }
+        return { side: 'receive',
+                 recommendation: onside ? 'HANDS' : 'RETURN',
+                 text: onside ? 'They may try an onside kick here. Hands team.' : 'Regular return.',
+                 options: RECEIVE_OPTIONS.slice() };
+    }
+
+    function callKickoff(c, id) {
+        var g = c.game;
+        if (!g.pendingKickoff) return fail(c, 'There is no kickoff to call.');
+        var ki = g.pendingKickoff.kickIdx;
+        if (ki === c.coach) {
+            if (!KICK_OPTIONS.some(function (o) { return o.id === id; })) return fail(c, 'That is not a kickoff call.');
+            c.forcedKick = { call: id };
+        } else {
+            if (!RECEIVE_OPTIONS.some(function (o) { return o.id === id; })) return fail(c, 'That is not a return call.');
+            c.forcedReceive = { call: id };
+        }
+        return advance(c);
+    }
+
     var ST_CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'your call, coach' };
 
     // Punt, field goal, go for it, or a fake, with the same confidence
@@ -564,8 +677,31 @@
             var fs = c.forcedSpecial;
             hooks.special = function () { return fs; };
         }
+        if (c.forcedToss) {
+            var ft = c.forcedToss;
+            hooks.coinToss = function () { return ft; };
+        }
+        if (c.forcedTossChoice) {
+            var ftc = c.forcedTossChoice;
+            hooks.tossChoice = function () { return ftc; };
+        }
+        if (c.forcedKick) {
+            var fk = c.forcedKick;
+            hooks.kickoffKick = function () { return fk.call; };
+        }
+        if (c.forcedReceive) {
+            var fr = c.forcedReceive;
+            hooks.kickoffReceive = function () { return fr.call; };
+        }
         g.hooks = hooks;
         c.lastOffFormation = null;
+        // The decision count for the career (DESIGN_PROPOSALS.md proposal 4,
+        // accepted 2026-08-28): how much of the job the coach did himself
+        // against how much his staff did for him. A forced call on his side
+        // is his; his side resolving without one is theirs. The opponent's
+        // decisions belong to nobody here.
+        var hadForcedOffense = !!c.forcedOffense, hadForcedDefense = !!c.forcedDefense;
+        var hadForcedSpecial = !!(c.forcedSpecial || c.forcedKick || c.forcedReceive);
         // Whose offense is about to run this snap. Recorded before the step
         // because a turnover flips g.off inside it, and a look at one team's
         // personnel must never be reported as a look at the other's (found by
@@ -573,18 +709,62 @@
         // coach's own formation as the opponent's).
         var offBefore = g.off;
 
+        var wasKickoffStep = !!g.pendingKickoff;
+        var wasTossStep = !!(g.pendingToss || g.pendingTossChoice);
+        var downBefore = g.down;
+        var logBefore = g.log.length;
         var res = deps.game.stepGame(g, deps);
-        c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null; g.hooks = null;
+        c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null;
+        c.forcedToss = null; c.forcedTossChoice = null; c.forcedKick = null; c.forcedReceive = null;
+        g.hooks = null;
         c.snapId++;
         c.suggestCache = {};
+        if (res) {
+            // A real snap: the coach's team was on one side of it.
+            if (offBefore === c.coach) {
+                if (hadForcedOffense || (downBefore === 4 && hadForcedSpecial)) c.decisions.coach++;
+                else c.decisions.staff++;
+            } else {
+                if (hadForcedDefense) c.decisions.coach++;
+                else c.decisions.staff++;
+            }
+        } else if (wasKickoffStep) {
+            // Every kickoff carries one decision for the coach's team: the
+            // kick call when it kicks, the return call when it receives. The
+            // toss itself is not counted - it is always the coach's moment,
+            // with no staff alternative to weigh it against.
+            if (hadForcedSpecial) c.decisions.coach++;
+            else c.decisions.staff++;
+        } else if (!wasTossStep && before.quarter === g.quarter &&
+                   downBefore === 4 && offBefore === c.coach) {
+            // A punt or a field goal resolves without a snap result, but it
+            // was still a fourth-down decision on the coach's possession and
+            // the career tally must not count "go for it" while dropping the
+            // punt the same key answered (found by the milestone review).
+            // The quarter guard keeps a clock rollover at a stale fourth
+            // down from counting as a decision nobody made.
+            if (hadForcedSpecial || hadForcedOffense) c.decisions.coach++;
+            else c.decisions.staff++;
+        }
 
-        // 1. the play result
-        // Terse gives the coach one line a play; full adds the call and who
-        // beat whom (DESIGN.md 2). The interface sets which it wants.
-        var last = g.log.length ? g.log[g.log.length - 1] : null;
-        var line = last ? ((c.verbosity === 'terse' && last.terse) ? last.terse : last.text) : '';
+        // 1. everything the step logged, in order. One step can log several
+        // things - the play, the touchdown, the extra point; a kickoff
+        // returned all the way plus its extra point - and speaking only the
+        // last entry silently dropped the rest, so a coach heard "extra
+        // point is good" with no word that a kickoff had just been returned
+        // on him (found by the milestone review; the one-line form predates
+        // it). Terse still gives one line per play where a terse form exists.
         if (res && res.formation) { c.lastFormation = res.formation; c.lastOffFormation = res.formation; c.lastOffTeam = offBefore; }
-        if (line) { c.log.push(line); c.lastReport = line; say(c, line, 'result', null); }
+        var spoken = [], li, entry, lineText;
+        for (li = logBefore; li < g.log.length; li++) {
+            entry = g.log[li];
+            lineText = (c.verbosity === 'terse' && entry.terse) ? entry.terse : entry.text;
+            if (!lineText) continue;
+            c.log.push(lineText);
+            spoken.push(lineText);
+            say(c, lineText, 'result', null);
+        }
+        if (spoken.length) c.lastReport = spoken.join(' ');
 
         // 2. must-answer reports come next, and the injuries are spoken with
         //    the result because the trainer speaks at once (DESIGN.md 18.4).
@@ -756,6 +936,8 @@
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
+                callToss: callToss, tossChoices: tossChoices, callTossChoice: callTossChoice,
+                kickoffChoices: kickoffChoices, callKickoff: callKickoff,
                 answerSubstitution: answerSubstitution, advance: advance,
                 halftime: halftime, halftimeChoice: halftimeChoice,
                 reports: reports, batchedReports: batchedReports, chimes: chimes,

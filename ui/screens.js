@@ -114,9 +114,11 @@
     function contextLine(app) {
         if (app.state.mode === 'game' && app.game) {
             var line = CTRL().situationLine(app.game);
-            if (app.step === 'offense-suggest' || app.step === 'defense-suggest' || app.step === 'special-suggest') {
+            if (app.step === 'offense-suggest' || app.step === 'defense-suggest' || app.step === 'special-suggest' ||
+                app.step === 'toss-choice' || app.step === 'kickoff-call') {
                 return line + ' ' + (app.suggested ? app.suggested.text : '') + ' Enter accepts.';
             }
+            if (app.step === 'toss-call') return line + ' Call the toss: H for heads, T for tails.';
             if (app.step === 'sub-answer') return line + ' Your coordinator is still waiting on a substitution.';
             if (app.step === 'advance') return line + ' Press Enter to play on.';
             return line;
@@ -385,6 +387,25 @@
             if (app.state.pacing === 'manual') say(app, 'Press the spacebar to play on.', 'result');
             return;
         }
+        if (p.kind === 'cointoss') {
+            app.step = 'toss-call';
+            say(app, 'The captains meet at midfield. Call it in the air: H for heads, T for tails.', 'result');
+            return;
+        }
+        if (p.kind === 'tosschoice') {
+            var tc = C.tossChoices(app.game);
+            app.step = 'toss-choice';
+            app.suggested = tc;
+            say(app, tc.text + ' Enter accepts, or F for your options.', 'result', 'ST');
+            return;
+        }
+        if (p.kind === 'kickoff') {
+            var kc = C.kickoffChoices(app.game);
+            app.step = 'kickoff-call';
+            app.suggested = kc;
+            say(app, kc.text + ' Enter accepts, or F for your options.', 'result', 'ST');
+            return;
+        }
         if (p.kind === 'special') {
             var sc = C.specialTeamsChoices(app.game);
             app.step = 'special-suggest';
@@ -611,6 +632,18 @@
             afterSnap(app, CTRL().callSpecial(app.game, item.id));
             return { say: 'special' };
         }
+        if (v.kind === 'tosschoice') {
+            app.state.viewer = null;
+            tone(app, 'close');
+            afterSnap(app, CTRL().callTossChoice(app.game, item.id));
+            return { say: 'tosschoice' };
+        }
+        if (v.kind === 'kickoffcall') {
+            app.state.viewer = null;
+            tone(app, 'close');
+            afterSnap(app, CTRL().callKickoff(app.game, item.id));
+            return { say: 'kickoffcall' };
+        }
         if (v.kind === 'defpart') {
             app.state.viewer = null;
             nextDefensePart(app, item.id);
@@ -730,6 +763,13 @@
 
     function gameKey(app, state, key) {
         var C = CTRL(), g = app.game;
+        // The toss call comes before the info keys: T means tails while the
+        // coin is in the air, not tendencies. Without this the very first
+        // documented key of a game spoke about coverages and left the toss
+        // pending (found by the milestone review).
+        if (app.step === 'toss-call' && (key.name === 'h' || key.name === 't')) {
+            return tossCallKey(app, key);
+        }
         if (key.name === 'Tab') { say(app, C.situationLine(g), 'result'); return { say: 'status' }; }
         if (key.name === 'x') { say(app, C.examine(g), 'result'); return { say: 'examine' }; }
         if (key.name === 'm') { say(app, C.matchups(g).join(' '), 'result', 'OC'); return { say: 'matchups' }; }
@@ -773,6 +813,9 @@
         if (app.step === 'offense-suggest') return offenseKey(app, key);
         if (app.step === 'defense-suggest') return defenseKey(app, key);
         if (app.step === 'special-suggest') return specialKey(app, key);
+        if (app.step === 'toss-call') return tossCallKey(app, key);
+        if (app.step === 'toss-choice') return tossChoiceKey(app, key);
+        if (app.step === 'kickoff-call') return kickoffKey(app, key);
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
@@ -837,6 +880,49 @@
         if (key.name === 'f') { openSpecialList(app); return { say: 'special-list' }; }
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
+    }
+
+    // The toss and the kickoff, in the same Enter-accepts, F-for-more
+    // grammar as everything else (DESIGN.md 8.4, ISSUES.md 2026-08-28).
+    function tossCallKey(app, key) {
+        if (key.name === 'h' || key.name === 't') {
+            afterSnap(app, CTRL().callToss(app.game, key.name === 'h'));
+            return { say: 'called' };
+        }
+        if (key.name === 'Enter') {
+            say(app, 'Call it: H for heads, T for tails.', 'result');
+            return { say: 'still waiting' };
+        }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function tossChoiceKey(app, key) {
+        if (key.name === 'Enter') {
+            afterSnap(app, CTRL().callTossChoice(app.game, app.suggested.recommendation));
+            return { say: 'called' };
+        }
+        if (key.name === 'f') { openChoiceList(app, 'tosschoice', CTRL().tossChoices(app.game)); return { say: 'toss-list' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function kickoffKey(app, key) {
+        if (key.name === 'Enter') {
+            afterSnap(app, CTRL().callKickoff(app.game, app.suggested.recommendation));
+            return { say: 'called' };
+        }
+        if (key.name === 'f') { openChoiceList(app, 'kickoffcall', CTRL().kickoffChoices(app.game)); return { say: 'kickoff-list' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function openChoiceList(app, kind, choices) {
+        var menu = U().makeMenu(choices.options.map(function (o) { return { id: o.id, text: o.text }; }),
+                                'Your options. Escape goes back.');
+        app.state.viewer = { kind: kind, menu: menu };
+        tone(app, 'open');
+        say(app, U().menuAnnounce(menu), 'result');
     }
 
     function openSpecialList(app) {

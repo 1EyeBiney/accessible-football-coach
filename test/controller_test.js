@@ -61,6 +61,12 @@ function playThrough(seed, opts) {
             var sp = C.specialTeamsChoices(c);
             out = C.callSpecial(c, sp.recommendation.toUpperCase());
             forced++;
+        } else if (p.kind === 'cointoss') {
+            out = C.callToss(c, true);
+        } else if (p.kind === 'tosschoice') {
+            out = C.callTossChoice(c, C.tossChoices(c).recommendation);
+        } else if (p.kind === 'kickoff') {
+            out = C.callKickoff(c, C.kickoffChoices(c).recommendation);
         } else if (p.kind === 'auto') {
             out = C.advance(c);
         } else if (p.kind === 'over') {

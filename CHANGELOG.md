@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0, August 29, 2026. The coin toss and the kickoff.
+
+Every game now opens with the coin toss (ISSUES.md, from play): the coach calls it in the air with H or T - always asked, whatever the delegation settings, because it happens once and it is his moment - and a winner chooses receive, defer to the second half, or kick, Enter accepting the recommendation and F offering the list. Defend-an-end is deliberately not offered: the engine has no wind or field direction for it to mean anything yet.
+
+Every kickoff is now a call in the fourth-down grammar. Kicking: deep, squib, pooch, or onside. Receiving: regular return or hands team. Gated by offenseMode - always asked in full control, only when an onside kick is genuinely in play (fourth quarter, inside four minutes, down one to sixteen points) when the coordinator stops the coach for the big ones, never when fully delegated. Onside kicks carry a real recovery mechanic, roughly one in five against a regular return unit and half that against a hands team, and the computer coach kicks onside from the same deterministic desperation window, so late trailing teams now fight for the ball headless too.
+
+Under the hood, kickoffs are deferred to their own engine step instead of resolving inside the scoring play, which is what makes them askable; the old call sites are untouched and the headless draw order is identical, so a seed replays as before outside the games where an onside kick now genuinely happens. The controller also counts, per game, the decisions the coach made himself against the ones his staff made for him - the accepted seed of DESIGN_PROPOSALS.md proposal 4 - and the count rides through saves.
+
+node test/run.js: 402 checks across seven files (was 372), including a new kickoff suite covering the toss flow, replay determinism through forced toss and kickoff calls, onside recovery rates statistically, the desperation window's edges, delegation gating, the decision count, and a save taken at the toss. Harness inside its bands at 17.9 points (the small shift from 18.2 is late trailing teams genuinely kicking onside now). Verified end to end in a real browser, including winning the toss, deferring through the F list, and kicking deep.
+
 ## 0.4.1, August 28, 2026. Whistle timing, and the shape of the call prompt.
 
 From Brian's first listen: the whistle now fires at half the pacing estimate for the result instead of the whole of it, so at a fast screen reader rate it lands on the tail of the announcement rather than leaving a dead gap after it - impinging on purpose, at his request. P still scales it.
