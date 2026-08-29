@@ -41,7 +41,7 @@ Every file starts with a comment saying what it owns and which DESIGN.md section
 Before any commit: node harness.js 100 1 --even runs clean and its numbers stay inside the targets in the harness header; node matrix.js runs clean; node test/run.js (create it if it does not exist) passes.
 After finishing a feature, spawn a fresh read-only reviewer subagent with the relevant prompt from KICKOFF.md before moving on. Fix what it finds that is real; log the rest in REVIEW_NOTES.md.
 Commit after every milestone with a message that names the milestone. Never leave the working tree in a state where index.html or the harness is broken. If a milestone is going badly, revert to the last commit and write down why in PROGRESS.md rather than pushing forward on a broken base.
-Do not push to any remote. Local commits only. Brian pushes.
+Push to origin after committing (status, 2026-08-28: Brian wants pushes done as part of the work, not held back for him to do separately). The remote is github.com/1EyeBiney/accessible-football-coach.
 
 ## Delegation policy
 

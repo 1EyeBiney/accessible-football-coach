@@ -22,7 +22,18 @@ Onside kicks, and a suggest-and-accept moment around the kickoff itself. The fou
 
 ## Needs a decision
 
-(Empty. Put questions here that need Brian's call.)
+Original recorded audio (2026-08-28). Brian wants to eventually add real audio clips
+(crowd noise, play-by-play lines, etc.), not just the synthesized chimes. Section 21's
+"runs by opening index.html, no server" rule is marked non-negotiable, and it is
+possible to keep it while adding recorded audio: plain `<audio>` elements (or a
+MediaElementAudioSourceNode built from one) load local files fine under file://
+in every major browser, no fetch() involved. What would actually force a server is
+the fancier path - fetching a clip's raw bytes and decoding it into a Web Audio buffer
+for layering/pitch control/precise timing, which Chrome blocks under file://. Past
+projects apparently needed Live Server because they used that fancier path, maybe out
+of habit rather than necessity. When this work starts, default to the plain-<audio>
+approach to keep section 21 intact; only spend the server-requirement conversation if
+a specific desired effect genuinely can't be done that way.
 
 ## Done
 
