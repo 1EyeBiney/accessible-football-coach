@@ -233,4 +233,65 @@ module.exports = function (t) {
     t.eq(ts.verbosity, 'full', 'verbosity starts full');
     U.cycleVerbosity(ts);
     t.eq(ts.verbosity, 'terse', 'verbosity switches to terse');
+
+    // ---------- the whistle boundary (ISSUES.md 2026-08-28) ----------
+    // A boundary splits the queue into utterances: the play result before it,
+    // the next call after it, the referee whistle in the gap.
+    var wq = U.makeQueue();
+    U.enqueue(wq, 'the play result', 'result');
+    U.queueBoundary(wq);
+    U.enqueue(wq, 'the next suggestion', 'result');
+    var seg1 = U.dequeueSegment(wq);
+    t.eq(seg1.length, 1, 'the first utterance stops at the boundary');
+    t.eq(seg1[0].text, 'the play result', 'and it is the play result');
+    t.ok(U.queueHasItems(wq), 'the suggestion is still queued behind the whistle');
+    var seg2 = U.dequeueSegment(wq);
+    t.eq(seg2[0].text, 'the next suggestion', 'the second utterance is the suggestion');
+    t.ok(!U.queueHasItems(wq), 'nothing is left after both segments');
+
+    // Priority sorting never crosses a boundary: a high priority line queued
+    // for the new play cannot jump back into the old play's utterance.
+    var pq = U.makeQueue();
+    U.enqueue(pq, 'a low priority note from the old play', 'batched');
+    U.queueBoundary(pq);
+    U.enqueue(pq, 'a must answer for the new play', 'must');
+    t.eq(U.dequeueSegment(pq)[0].text, 'a low priority note from the old play',
+         'a must for the new play never jumps in front of the old play');
+
+    // A boundary in front of nothing is not a boundary: the whistle must
+    // never blow in front of silence.
+    var eq2 = U.makeQueue();
+    U.queueBoundary(eq2);
+    U.enqueue(eq2, 'only line', 'result');
+    var only = U.dequeueSegment(eq2);
+    t.eq(only[0].text, 'only line', 'a boundary on an empty queue creates no empty utterance');
+    t.ok(!U.queueHasItems(eq2), 'and nothing is stranded behind it');
+
+    // Two boundaries in a row collapse to one split.
+    var dq = U.makeQueue();
+    U.enqueue(dq, 'first', 'result');
+    U.queueBoundary(dq);
+    U.queueBoundary(dq);
+    U.enqueue(dq, 'second', 'result');
+    U.dequeueSegment(dq);
+    t.eq(U.dequeueSegment(dq)[0].text, 'second', 'a doubled boundary still yields exactly two utterances');
+    t.ok(!U.queueHasItems(dq), 'with nothing between them');
+
+    // queueClear resets the segmentation with the items.
+    var cq = U.makeQueue();
+    U.enqueue(cq, 'x', 'result');
+    U.queueBoundary(cq);
+    U.enqueue(cq, 'y', 'result');
+    U.queueClear(cq);
+    t.eq(cq.segment, 0, 'clearing the queue resets the segment counter');
+    t.ok(!U.queueHasItems(cq), 'and empties it');
+
+    // The report flag rides on the item, so the speaker can set the C repeat
+    // buffer from what was actually spoken rather than what was queued.
+    var rq = U.makeQueue();
+    U.enqueue(rq, 'football', 'result', 'OC', true);
+    U.enqueue(rq, 'chatter', 'ui', null, false);
+    var rItems = U.dequeueSegment(rq);
+    t.ok(rItems[0].report === true && rItems[1].report === false,
+         'the report flag distinguishes football from interface chatter at speak time');
 };

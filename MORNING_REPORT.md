@@ -1,49 +1,33 @@
 # Morning report
 
-Written the afternoon of August 27, 2026, in a session that ran from the play-fix list straight through the tuning pass. Everything below is plain prose. The first section is what's new to listen for; the rest is what happened and what I need from you.
+Written August 28, 2026, after the session that worked through your play notes live. Plain prose, as always. The first section is what is new to your ears; the rest is what happened and what is parked.
 
 ## What to open
 
-Same as before: open index.html and press Enter on the button. Nothing about getting into a game has changed. Two things are genuinely new once you're playing.
+Open index.html and press Enter on the button, same as always. Nothing about getting into a game has changed. Three things are new once you are playing.
 
-## Saving and loading
+## The whistle
 
-G now saves the whole game to a file on your disk, not just the play by play. Press it any time during a game, or once the game is over, and you'll hear "Game saved to a file." or a plain "Could not save" if something went wrong.
+After every play, you now hear the result as its own utterance, then one of your eight referee whistles, then the next suggestion as a separate utterance. The whistle is the ready-for-play whistle: everything before it belongs to the play that just happened, everything after it belongs to the next one. No two whistles repeat until all eight have been heard, and which one plays is chosen outside the game's seed, so replays are untouched. The play clock, when you have it on, now starts at the whistle, like real football.
 
-Shift G opens your file picker to load one back. So does Load on the main menu; Resume, right above it on the main menu, does the same thing but from the crash copy the game now keeps in your browser automatically, refreshed after every decision you make. If you close the tab or the browser crashes, Resume gets you back to where you were. If nothing has been saved yet, either key tells you so plainly rather than going quiet.
+The timing to listen for: the whistle is scheduled off the same speech-length estimate the auto-advance already uses, so on medium pacing it should land near the end of the result rather than on top of it. If your NVDA rate is much faster than average, the gap may feel long; press any key and the game does not wait — your key always wins, and anything still owed to you is spoken immediately. P still changes pacing if the rhythm feels wrong, and that is the first thing to try.
 
-One thing worth testing directly with NVDA or JAWS running, since I could only reason about it and not hear it myself: press G or Shift G, and before the file dialog visibly appears, try pressing another key. I don't think anything can go wrong there, but I want your ears on it rather than my argument for why it's fine.
+## The defensive look
 
-## Fourth down
+When you are calling the defense, the prompt now starts with what the offense is showing: "They show twenty one personnel," and then your coordinator's suggested call. That personnel read is exactly what the engine's own defensive coordinator is handed, nothing more — real defenses match personnel, and the formation is only revealed at the line, so it is deliberately not announced. On your first defensive snap, before anyone has seen anything, you will hear "No look at their personnel yet" rather than a guess.
 
-Your own fourth down is no longer automatic. You'll hear a recommendation - punt, field goal, or go for it - with the same confidence wording your coordinators already use, and Enter takes it, exactly like an offensive or defensive suggestion. Press F instead and you'll hear a short list: the same options, plus a fake of whichever kick was recommended, if one makes sense here. A fake is a real play with real risk, not a safer version of going for it - if you call one, you'll hear "Fake punt!" or "Fake field goal!" before the play result.
+## The seed
 
-The opponent's own fourth down is still never a question you're asked, and neither is a kneel-out when you're just running out the clock with a lead. Whatever you've set O to (call it yourself, hand it to your coordinator, or have him stop you for the big ones) governs your fourth down the same way it governs everything else on offense, since this is your possession either way.
+Shift Tab speaks the seed of the current game as a plain number. Write it down with anything you notice and the whole game can be replayed exactly. Tab is unchanged: the short situation line.
 
-Onside kicks are not built. A kickoff, including the one after your own score, still just happens. If you want a suggest-and-accept moment there too, that's real engine work - it needs an actual recovery-rate mechanic, not just a wrapper around what already exists - and it's noted rather than started.
+## The play clock, if you use it
 
-## What was built
+Two changes worth hearing, both from the auditor rather than from your notes. Letting the clock expire on your own offensive call now actually announces the delay of game - it had been silently moving the ball five yards since the clock was built. And letting it expire on your own defensive call no longer flags your opponent: the ball is snapped and your defense goes with the call your coordinator suggested, which is what stalling on defense costs in real football.
 
-Two milestones plus a tuning pass, five commits, nothing pushed.
+## What is parked, by your own call
 
-Save and load, argued and built the way the design asks: the real save is a file, the crash copy is localStorage, and the hard part was making sure a player referenced from a dozen places (a hunch's target, an event's tackler, a belief store's evidence) comes back as the same object everywhere rather than a dozen disconnected copies. I wrote a test that saves mid-decision, after a coordinator's suggestion has already drawn from the seed but before the play is called, reloads, and checks twenty more snaps replay identically - that's the scenario that would have caught a subtle version of this bug if I'd gotten it wrong.
-
-The fourth down flow, built without inventing a fourth full coordinator. Section 5.1 gives a special teams coordinator the same attribute list as your other two, which would mean his own uncertainty about arithmetic - a punt-or-kick decision is close to solvable from the down, distance, field position, score, and clock alone, and manufacturing a belief model for that felt like exactly the kind of addition CLAUDE.md's caution about attributes warns against. The reasoning is written out in DESIGN_PROPOSALS.md if you want to push back on it.
-
-The tuning pass worked through everything left in ISSUES.md: cover three (the caller no longer defaults to it everywhere; it's now a run-down and heavy-personnel call the way the design ruled), blowouts (down from about one in five mixed-quality games to about one in eleven, close to the one-in-eight target), and fumbles, which I measured and left alone for the same reason the last balance pass gave - pushing them higher risks either exceeding real fumble rates or making every game read as slapstick.
-
-## What the accessibility auditor found
-
-Run twice, once after each feature, scoped narrowly both times rather than over the whole shell. Five real things, all fixed: a confirmation left open from before a load could have silently thrown away the game you'd just gotten back; the game's own focus trap was fighting the file picker it's supposed to let through; nothing stopped a second file-picker call if a key repeated; resuming a game that had already finished read out a stale down and distance instead of the final score and your assistants' review; and the F12 keyboard explorer told you F opened the offensive formation list even when you were sitting on a fourth-down decision, because it knew what screen you were on but not what you were in the middle of. Full writeups, including two smaller things checked and left alone with reasons, are in REVIEW_NOTES.md.
-
-## What is not built
-
-Everything the last report already listed as out of scope for one game: the weekly Focus screen, scouting, practice, recruiting, career, legacy. Also new to this list: onside kicks and any kickoff-specific choice, described above, and the designated target mechanic.
-
-## The one decision I need from you
-
-The designated target (DESIGN.md 26.3, Decided last session): letting a coordinator tell the quarterback where the ball is going before the snap, so his read reaches inside the play rather than only choosing between plays. It was queued for this session too but ISSUES.md didn't call for it directly, so I built what ISSUES.md asked for and held off starting a second engine feature on top of it without checking. It's still the answer to the open question in DESIGN_PROPOSALS.md about how much a coordinator should be worth on the scoreboard - right now that gap is real but small, about a point and a half a game. Do you want it built next, or would you rather I hold it until after your next round of play testing brings back a fresh batch of notes?
+The coin toss and kickoff milestone is agreed in shape and written into ISSUES.md: you call heads or tails as the visitor, the winner chooses receive, kick, defer, or an end, and both sides pick a real kickoff call, with onside kicks riding along. Not started yet. The designated target mechanic stays parked from last session. A possible future clause where your offensive coordinator reads the defensive shell aloud at full verbosity is written down but deliberately left out of this pass, since T already gives you tendencies on demand.
 
 ## Where everything is written down
 
-PROGRESS.md has two new milestone entries in the same order the work happened. REVIEW_NOTES.md has both accessibility passes. BALANCE_NOTES.md has the full before-and-after numbers for cover three and blowouts, plus the fumbles reasoning. DESIGN_PROPOSALS.md has three entries now: the two from last session plus the special-teams staffing argument. ISSUES.md's before-next-build and tuning sections are both empty; everything that was in them moved to Done with a one-line note. CHANGELOG.md is at 0.3.0.
+PROGRESS.md has the session 3 entry, including the reasoning ported from your accessible golf audio engine. ISSUES.md moved the whistle, the seed key, and the defensive look to Done. CHANGELOG.md is at 0.4.0. REVIEW_NOTES.md has the accessibility auditor's pass over the new whistle timing. The project is now on GitHub at github.com/1EyeBiney/accessible-football-coach, public, and pushes happen with the work now, per your instruction.

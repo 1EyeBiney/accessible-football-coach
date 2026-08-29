@@ -164,7 +164,8 @@
                 lastReport: c.lastReport, verbosity: c.verbosity,
                 secondHalfPlan: c.secondHalfPlan, snapId: c.snapId,
                 suggestCache: c.suggestCache, lastFormation: c.lastFormation,
-                lastOffFormation: c.lastOffFormation, lastDefFront: c.lastDefFront
+                lastOffFormation: c.lastOffFormation, lastOffTeam: c.lastOffTeam,
+                lastDefFront: c.lastDefFront
             })
         };
         return JSON.stringify(payload);
@@ -208,7 +209,8 @@
             lastReport: cc.lastReport, verbosity: cc.verbosity,
             secondHalfPlan: cc.secondHalfPlan, game: g, snapId: cc.snapId,
             suggestCache: cc.suggestCache, lastFormation: cc.lastFormation,
-            lastOffFormation: cc.lastOffFormation, lastDefFront: cc.lastDefFront,
+            lastOffFormation: cc.lastOffFormation, lastOffTeam: cc.lastOffTeam,
+            lastDefFront: cc.lastDefFront,
             forcedOffense: null, forcedDefense: null, forcedSpecial: null
         };
         g.controller = c;

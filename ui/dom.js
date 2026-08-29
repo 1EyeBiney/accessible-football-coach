@@ -38,6 +38,7 @@
                 var Ctx = window.AudioContext || window.webkitAudioContext;
                 if (Ctx) { audio = new Ctx(); prime(); }
             } catch (e) { audio = null; }
+            primeClips();
             el.init.style.display = 'none';
             el.container.hidden = false;
             el.container.focus();
@@ -123,6 +124,95 @@
     }
 
     function setMuted(v) { muted = !!v; }
+
+    // ---------- recorded clips (ISSUES.md 2026-08-28, the referee whistle) ----------
+
+    // The three patterns proven on the accessible golf project, ported rather
+    // than copied. One: every file gets its Audio element once, at the start
+    // click, so playing is rewind and play with nothing fetched at the
+    // trigger. Two: a grab bag pops a shuffled index per play, so no clip
+    // repeats until all have been heard. Three: the caller's continuation is
+    // gated on the clip's ended event with a fired-once guard and a failsafe
+    // timeout, never on a duration guess, because we always know when our own
+    // clip ends and never know when the screen reader finishes speaking.
+    //
+    // The shuffle draws from its own Rng seeded off the clock: cosmetic sound
+    // choice must never touch the game's seeded stream (CLAUDE.md, no
+    // Math.random and every game replayable), and this stream deciding
+    // nothing about football is the point of keeping it separate.
+    var CLIPS = {
+        whistle: { path: 'audio/ref/whistle_referee_', count: 8, pool: null, bag: [], last: -1 }
+    };
+    var cosmeticRng = null;
+
+    function primeClips() {
+        if (typeof Audio === 'undefined') return;
+        var R = root.AF && root.AF.Rng;
+        cosmeticRng = R ? new R((Date.now() % 2147483647) || 1) : null;
+        var k, set, i;
+        for (k in CLIPS) {
+            set = CLIPS[k];
+            set.pool = [];
+            for (i = 1; i <= set.count; i++) {
+                try { set.pool.push(new Audio(set.path + i + '.mp3')); }
+                catch (e) { /* a missing file costs the clip, never the game */ }
+            }
+        }
+    }
+
+    function refillBag(set) {
+        var i, j, t;
+        set.bag = [];
+        for (i = 0; i < set.pool.length; i++) set.bag.push(i);
+        if (cosmeticRng) {
+            for (i = set.bag.length - 1; i > 0; i--) {
+                j = cosmeticRng.int(0, i);
+                t = set.bag[i]; set.bag[i] = set.bag[j]; set.bag[j] = t;
+            }
+        }
+        // Never the same clip twice in a row across a refill.
+        if (set.bag.length > 1 && set.bag[set.bag.length - 1] === set.last) {
+            t = set.bag[set.bag.length - 1];
+            set.bag[set.bag.length - 1] = set.bag[0];
+            set.bag[0] = t;
+        }
+    }
+
+    // Fire and forget with a continuation: onDone always runs exactly once,
+    // whether the clip finishes, fails to play, or does not exist at all, so
+    // the game never stalls behind a sound (the golf yield pattern).
+    var activeClip = null;
+
+    function playClip(kind, onDone) {
+        var done = false;
+        function finish() { if (!done) { done = true; if (onDone) onDone(); } }
+        var set = CLIPS[kind];
+        if (!set || !set.pool || !set.pool.length || muted) { finish(); return; }
+        if (!set.bag.length) refillBag(set);
+        var idx = set.bag.pop();
+        set.last = idx;
+        var clip = set.pool[idx];
+        try {
+            clip.currentTime = 0;
+            clip.onended = finish;
+            activeClip = clip;
+            var p = clip.play();
+            if (p && p.catch) p.catch(finish);
+            // Failsafe in case ended is swallowed; the whistles run a second
+            // or two, so four covers the longest without holding a stall long.
+            setTimeout(finish, 4000);
+        } catch (e) { finish(); }
+    }
+
+    // A key from the coach silences whatever clip is sounding. The paused
+    // clip fires no ended event; its caller's continuation is already
+    // invalidated by the generation bump, and the failsafe timeout cleans up
+    // the once-guard harmlessly.
+    function stopClips() {
+        if (!activeClip) return;
+        try { activeClip.pause(); } catch (e) { /* already stopped */ }
+        activeClip = null;
+    }
 
     // ---------- saving to disk (DESIGN.md 21.10) ----------
 
@@ -226,6 +316,7 @@
     }
 
     var api = { start: start, announce: announce, panel: panel, tone: tone, setMuted: setMuted,
+                playClip: playClip, stopClips: stopClips,
                 saveToDisk: saveToDisk, loadFromDisk: loadFromDisk,
                 crashSave: crashSave, crashLoad: crashLoad, copyToClipboard: copyToClipboard,
                 TONES: TONES };

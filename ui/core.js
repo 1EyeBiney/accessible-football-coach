@@ -59,22 +59,47 @@
     // things arrive at once: the play result, then anything that must be
     // answered, then the low priority notes. Cued reports are not queued at
     // all; they wait behind a chime until the coach asks (DESIGN.md 19.2).
+    //
+    // Segments: a boundary splits the queue into utterances. Everything before
+    // a boundary is one utterance (the play result), everything after is the
+    // next (the new call). The interface plays the ready-for-play whistle in
+    // the gap. Priority sorting never crosses a boundary, so a late must-
+    // answer report belonging to the new play cannot jump back into the old
+    // one (ISSUES.md 2026-08-28, the referee whistle).
     var PRIORITY_ORDER = { result: 0, must: 1, batched: 2, ui: 3 };
 
     function makeQueue() {
-        return { items: [], seq: 0, speaking: null };
+        return { items: [], seq: 0, speaking: null, segment: 0 };
     }
 
-    function enqueue(q, text, priority, source) {
+    // report marks football the coach may ask to hear again with C, as
+    // opposed to interface chatter. The speaker uses it to set the repeat
+    // buffer when the line is actually spoken rather than when it is queued,
+    // which matters once a whistle boundary can hold a line back: the repeat
+    // key must never offer something the coach has not heard yet.
+    function enqueue(q, text, priority, source, report) {
         if (!text) return q;
-        q.items.push({ text: text, priority: priority || 'ui', source: source || null, seq: q.seq++ });
+        q.items.push({ text: text, priority: priority || 'ui', source: source || null,
+                       report: !!report, seq: q.seq++, segment: q.segment || 0 });
         q.items.sort(function (a, b) {
+            if ((a.segment || 0) !== (b.segment || 0)) return (a.segment || 0) - (b.segment || 0);
             var pa = PRIORITY_ORDER[a.priority], pb = PRIORITY_ORDER[b.priority];
             if (pa === undefined) pa = 3;
             if (pb === undefined) pb = 3;
             if (pa !== pb) return pa - pb;
             return a.seq - b.seq;   // stable inside a priority
         });
+        return q;
+    }
+
+    // Marks the whistle boundary. A boundary in front of nothing is not a
+    // boundary, so an empty segment is never created and the whistle never
+    // plays in front of silence.
+    function queueBoundary(q) {
+        var i, cur = q.segment || 0;
+        for (i = 0; i < q.items.length; i++) {
+            if ((q.items[i].segment || 0) === cur) { q.segment = cur + 1; return q; }
+        }
         return q;
     }
 
@@ -85,7 +110,22 @@
         return item;
     }
 
-    function queueClear(q) { q.items = []; q.speaking = null; return q; }
+    // One utterance: every item of the earliest segment still queued. What
+    // remains after a boundary stays queued for after the whistle.
+    function dequeueSegment(q) {
+        if (!q.items.length) return [];
+        var seg = q.items[0].segment || 0;
+        var out = [];
+        while (q.items.length && (q.items[0].segment || 0) === seg) {
+            out.push(q.items.shift());
+        }
+        q.speaking = out[out.length - 1] || null;
+        return out;
+    }
+
+    function queueHasItems(q) { return q.items.length > 0; }
+
+    function queueClear(q) { q.items = []; q.speaking = null; q.segment = 0; return q; }
 
     // ---------- pacing (DESIGN.md 21.8) ----------
 
@@ -354,6 +394,7 @@
     var api = {
         sanitize: sanitize, numberWords: numberWords,
         makeQueue: makeQueue, enqueue: enqueue, dequeue: dequeue, queueClear: queueClear,
+        queueBoundary: queueBoundary, dequeueSegment: dequeueSegment, queueHasItems: queueHasItems,
         PRIORITY_ORDER: PRIORITY_ORDER, PACING: PACING, PACING_ORDER: PACING_ORDER, pauseFor: pauseFor,
         makeMenu: makeMenu, menuAnnounce: menuAnnounce, menuMove: menuMove, menuSelect: menuSelect,
         menuFastForward: menuFastForward,

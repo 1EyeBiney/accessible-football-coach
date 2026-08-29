@@ -17,6 +17,12 @@
     var autoTimer = null;
     var clockTimer = null;
     var clockLeft = 0;
+    var whistleTimer = null;
+    // Bumped by every keypress and every cancel; a whistle continuation that
+    // comes back to a stale generation does nothing, so a clip that was
+    // already playing when the coach acted can never fire an action into
+    // whatever he is doing now.
+    var whistleGen = 0;
 
     function deps() {
         return { Rng: AF.Rng, players: AF.players, plays: AF.plays,
@@ -25,9 +31,10 @@
 
     function makeOut() {
         return {
-            say: function (text, priority, source) { AF.ui.enqueue(queue, text, priority, source); },
+            say: function (text, priority, source, report) { AF.ui.enqueue(queue, text, priority, source, report); },
             tone: function (name) { AF.dom.tone(name); },
-            panel: function (lines) { AF.dom.panel(lines); }
+            panel: function (lines) { AF.dom.panel(lines); },
+            boundary: function () { AF.ui.queueBoundary(queue); }
         };
     }
 
@@ -39,22 +46,76 @@
     // is already reading at its own speed, and the queue simply backed up. A
     // whole game produced three spoken lines and a backlog of four hundred.
     // One keystroke, one utterance, no backlog (DESIGN.md 21.3).
-    function speakQueue() {
-        var parts = [], item;
-        while ((item = AF.ui.dequeue(queue))) parts.push(item.text);
-        if (!parts.length) return '';
-        var text = parts.join(' ');
+    //
+    // Segments: a whistle boundary in the queue ends the utterance early.
+    // What sits behind the boundary (the next play's prompt) is spoken by
+    // proceed() after the referee whistle has actually finished playing.
+    function speakSegment() {
+        var items = AF.ui.dequeueSegment(queue);
+        if (!items.length) return '';
+        var text = items.map(function (item) { return item.text; }).join(' ');
+        // The repeat buffer is set when football is actually spoken, not when
+        // it was queued, so C never offers a line still waiting behind the
+        // whistle (found by the whistle audit).
+        var report = items.filter(function (item) { return item.report; })
+                          .map(function (item) { return item.text; }).join(' ');
+        if (report && app) app.state.lastReport = report;
         AF.dom.announce(text);
         return text;
+    }
+
+    // What happens after an utterance: if a whistle boundary is holding more
+    // speech, schedule the whistle; otherwise arm the ordinary timers. The
+    // suggestion is gated on the whistle clip actually ending, never on a
+    // duration guess - we always know when our own clip finishes and never
+    // know when the screen reader does (the golf yield pattern, ISSUES.md
+    // 2026-08-28).
+    function proceed(said) {
+        if (AF.ui.queueHasItems(queue)) { scheduleWhistle(said); return; }
+        scheduleAuto(said);
+        startPlayClock();
+    }
+
+    // The pause before the whistle is the pacing estimate for what was just
+    // said, so the whistle lands near the end of the result rather than on
+    // top of its first words. Manual pacing gates game advancement, not the
+    // speech the coach's own action produced, so it borrows the medium
+    // estimate here rather than holding the prompt hostage to another key.
+    function scheduleWhistle(said) {
+        cancelWhistle();
+        var mode = app.state.pacing === 'manual' ? 'medium' : app.state.pacing;
+        var wait = AF.ui.pauseFor(said, mode);
+        whistleTimer = root.setTimeout(function () {
+            whistleTimer = null;
+            var gen = ++whistleGen;
+            AF.dom.playClip('whistle', function () {
+                if (gen !== whistleGen) return;
+                // Today nothing can open a confirmation, help, a viewer, the
+                // explorer, or the picker except a keypress, and every
+                // keypress bumps the generation above. The guard is here for
+                // the first future feature that opens one from a timer or a
+                // controller event: the held segment must then stay queued
+                // for the next keypress rather than speak over what is open.
+                if (app && (app.state.confirm || app.state.help || app.state.viewer ||
+                            app.state.explore || app.state.loading)) return;
+                proceed(speakSegment());
+            });
+        }, Math.max(400, wait));
+    }
+
+    function cancelWhistle() {
+        if (whistleTimer) { root.clearTimeout(whistleTimer); whistleTimer = null; }
+        whistleGen++;
+        // A key from the coach silences a whistle still in the air, not just
+        // its continuation: his key takes precedence over everything.
+        if (AF.dom.stopClips) AF.dom.stopClips();
     }
 
     // Called by ui/screens.js when a file picker or a crash-copy load
     // finishes outside any key press, so nothing else is waiting to drain the
     // queue and re-arm the timers the way onKeyDown does below.
     function announceNow() {
-        var said = speakQueue();
-        scheduleAuto(said);
-        startPlayClock();
+        proceed(speakSegment());
     }
 
     // ---------- the pause before the game moves on its own ----------
@@ -76,9 +137,20 @@
         if (wait < 0) return;
         autoTimer = root.setTimeout(function () {
             autoTimer = null;
-            AF.screens.handleKey(app, { name: 'Enter', shift: false, ctrl: false, alt: false, auto: true });
-            var said = speakQueue();
-            scheduleAuto(said);
+            // The ready-for-play whistle precedes an auto-advanced snap too,
+            // and the snap waits for the clip to finish. The guards run again
+            // inside the continuation because a second or two has passed and
+            // the coach may have opened something in it.
+            var gen = ++whistleGen;
+            AF.dom.playClip('whistle', function () {
+                if (gen !== whistleGen) return;
+                if (!app || !app.game) return;
+                if (app.state.confirm || app.state.help || app.state.viewer || app.state.explore || app.state.loading) return;
+                var p = AF.controller.pending(app.game);
+                if (!p || p.kind !== 'auto') return;
+                AF.screens.handleKey(app, { name: 'Enter', shift: false, ctrl: false, alt: false, auto: true });
+                proceed(speakSegment());
+            });
         }, Math.max(400, wait));
     }
 
@@ -106,11 +178,29 @@
             if (clockLeft <= 0) {
                 stopPlayClock();
                 AF.dom.tone('must');
-                AF.controller.delayOfGame(app.game);
-                AF.screens.emit(app, AF.controller.drain(app.game));
+                var expired = AF.controller.pending(app.game);
+                if (expired && expired.kind === 'defense') {
+                    // The play clock belongs to the offense (DESIGN.md
+                    // 16.5.1). A coach stalling on his own defensive call
+                    // cannot draw a flag on his opponent; the ball is snapped
+                    // and his defense is caught in the call his coordinator
+                    // suggested. Found by the whistle audit: the old branch
+                    // handed the stalling coach five free yards.
+                    AF.ui.enqueue(queue, AF.ui.sanitize(
+                        'The ball is snapped. Your defense goes with the call your coordinator suggested.'),
+                        'result', 'DC', true);
+                    AF.screens.handleKey(app, { name: 'Enter', shift: false, ctrl: false, alt: false, auto: true });
+                    proceed(speakSegment());
+                    return;
+                }
+                // delayOfGame drains its own queue and returns what was said;
+                // draining again afterwards gets an empty list and silently
+                // loses the penalty announcement (the same trap ui/screens.js
+                // documents on emit, found here by the whistle audit).
+                AF.screens.emit(app, AF.controller.delayOfGame(app.game));
+                AF.ui.queueBoundary(queue);
                 AF.screens.promptNext(app);
-                speakQueue();
-                startPlayClock();
+                proceed(speakSegment());
                 return;
             }
             if (clockLeft <= 5) AF.dom.tone('clockLate');
@@ -151,12 +241,13 @@
         var key = { name: name, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey, raw: e.key };
         e.preventDefault();
         // A key from the coach always takes precedence over anything the game
-        // was about to do on its own.
+        // was about to do on its own, including a whistle still in the air.
         cancelAuto();
         stopPlayClock();
+        cancelWhistle();
         try {
             var out = AF.screens.handleKey(app, key);
-            var said = speakQueue();
+            var said = speakSegment();
             // Silence is a bug (DESIGN.md 21.3). A key nothing wanted still
             // gets an answer, so the coach can tell a key that did nothing
             // from a game that has stopped responding.
@@ -164,8 +255,7 @@
                 said = AF.ui.sanitize(unhandledLine(key, out));
                 AF.dom.announce(said);
             }
-            scheduleAuto(said);
-            startPlayClock();
+            proceed(said);
         } catch (err) {
             AF.dom.announce(AF.ui.sanitize('Something went wrong. ' +
                 (err && err.message ? err.message : 'Unknown error') +
@@ -189,7 +279,7 @@
         // The container's own label is announced by the screen reader when it
         // takes focus. Speaking straight away interrupts it and the coach
         // hears half of each. A short wait lets the label finish first.
-        root.setTimeout(function () { speakQueue(); }, 700);
+        root.setTimeout(function () { speakSegment(); }, 700);
         root.addEventListener('keydown', onKeyDown, true);
     }
 

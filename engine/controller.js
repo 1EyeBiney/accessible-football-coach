@@ -219,6 +219,25 @@
         return parts.join(' ');
     }
 
+    // What the offense is showing before the coach's defensive call, spoken
+    // only when it is real information. This is exactly what the engine's own
+    // defensive coordinator is handed (buildSuggestion feeds chooseDefense the
+    // same personnel), so the human coach hears neither more nor less than the
+    // computer one knows (DESIGN.md 16.5, 24.1). Real defenses match personnel,
+    // not formation: the formation is only revealed at the line, so it is not
+    // announced here.
+    function offenseShows(c) {
+        var PL = c.deps.plays;
+        // A look only counts when it was a look at the team that has the
+        // ball now; after a turnover the last formation seen belongs to the
+        // coach's own offense, and reporting it as the opponent's would be a
+        // false claim spoken as fact.
+        var seen = c.lastOffFormation && c.lastOffTeam === c.game.off;
+        if (!seen) return 'No look at their personnel yet.';
+        var p = PL.FORMATIONS[c.lastOffFormation].personnel;
+        return 'They show ' + words(Number(p)) + ' personnel.';
+    }
+
     // ---------- suggestions (DESIGN.md 16.5) ----------
 
     var CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'I am guessing here' };
@@ -538,6 +557,12 @@
         }
         g.hooks = hooks;
         c.lastOffFormation = null;
+        // Whose offense is about to run this snap. Recorded before the step
+        // because a turnover flips g.off inside it, and a look at one team's
+        // personnel must never be reported as a look at the other's (found by
+        // the whistle audit: after an interception, offenseShows spoke the
+        // coach's own formation as the opponent's).
+        var offBefore = g.off;
 
         var res = deps.game.stepGame(g, deps);
         c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null; g.hooks = null;
@@ -549,7 +574,7 @@
         // beat whom (DESIGN.md 2). The interface sets which it wants.
         var last = g.log.length ? g.log[g.log.length - 1] : null;
         var line = last ? ((c.verbosity === 'terse' && last.terse) ? last.terse : last.text) : '';
-        if (res && res.formation) { c.lastFormation = res.formation; c.lastOffFormation = res.formation; }
+        if (res && res.formation) { c.lastFormation = res.formation; c.lastOffFormation = res.formation; c.lastOffTeam = offBefore; }
         if (line) { c.log.push(line); c.lastReport = line; say(c, line, 'result', null); }
 
         // 2. must-answer reports come next, and the injuries are spoken with
@@ -717,6 +742,7 @@
     var api = { MODES: MODES, PLAY_CLOCK: PLAY_CLOCK,
                 newGame: newGame, pending: pending, drain: drain,
                 situationLine: situationLine, examine: examine, suggestion: suggestion,
+                offenseShows: offenseShows,
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,

@@ -23,12 +23,13 @@
         l('F1 opens and closes this help.'),
         l('F12 turns the keyboard explorer on and off. While it is on, every key you press is described and nothing happens.'),
         l('Tab reads the situation: down, distance, where the ball is, the quarter, the clock and the score.'),
+        l('Shift Tab reads the seed of this game. Give that number with anything you report, because the seed replays the whole game.'),
         l('C repeats the last thing you were told.'),
         l('P changes the pacing between fast, medium, slow and manual. On manual, the game waits for the spacebar before anything happens on its own.'),
         l('V switches between full and terse. Terse gives you one line a play.'),
         l('Escape goes back one step and tells you where you have ended up.'),
         l('Q quits. You will be asked to confirm.'),
-        l('Five keys belong to the browser and not to the game: F5 reloads the page, F6 moves to the address bar, F11 is full screen, control R reloads, and control F opens the browser find bar. The game does not handle any of them. F5 and control R will throw away a game in progress, because saving a game is not built yet.')
+        l('Five keys belong to the browser and not to the game: F5 reloads the page, F6 moves to the address bar, F11 is full screen, control R reloads, and control F opens the browser find bar. The game does not handle any of them. F5 and control R reload the page, but the crash copy means Resume on the main menu can bring the game back, and G saves the real thing to a file.')
     ];
 
     var MENU = [
@@ -42,6 +43,8 @@
     var GAME = [
         h('Calling a play'),
         l('Your coordinator suggests a formation and a play as soon as the last one is over. You do not have to ask.'),
+        l('A referee whistle marks the ball ready for play. Everything before the whistle belongs to the last play; everything after it, including the suggestion, belongs to the next one.'),
+        l('On defense, before your call, you hear what personnel the offense is showing, which is the same look your coordinator builds his call from.'),
         l('Enter accepts what he suggested.'),
         l('F opens the formation list if you want something else. Pick a formation, then pick a play from the call sheet for this down and distance.'),
         l('N calls no huddle. It keeps the same personnel and denies the defense a clean substitution, but your players tire faster and you get less information.'),
@@ -208,6 +211,7 @@
         if (ctrl && lower === 'Enter') return 'Control and Enter. Jumps to the last real choice and takes it.';
         if (shift && lower === 'h') return 'Shift H. Moves to the previous heading.';
         if (shift && lower === 'g') return 'Shift G. Opens your file picker to load a saved game.';
+        if (shift && lower === 'Tab') return 'Shift Tab. Reads the seed of this game, for reporting anything you notice.';
         var stepTable = STEP_KEYS[step];
         if (stepTable && stepTable[lower]) return (shift ? 'Shift ' : '') + describeName(lower) + '. ' + stepTable[lower];
         var modeTable = MODE_KEYS[mode];

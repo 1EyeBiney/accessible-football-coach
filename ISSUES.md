@@ -6,7 +6,10 @@ An item marked "before next build" is fixed before any new feature work starts. 
 
 ## From play (Brian writes here)
 
-(Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Tab reads the current seed on the game screen once that is built.)
+(Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Shift Tab reads the current seed on the game screen.)
+
+After selecting the program, we should basically be entering game mode and for now, let's just have the human be the visitor and be given the choice to call for heads or tails. we need to build that coin toss into the game and have the player get the take ball, defend end choice like real football does, have that coin flip and then go into kickoff. I would expect at that point to call my kickoff or receiving formations. I do not know what current football levels do for kickoffs but let's try and be authentic.
+
 
 ## Before next build
 
@@ -14,11 +17,17 @@ An item marked "before next build" is fixed before any new feature work starts. 
 
 ## Not started
 
+The coin toss and kickoff milestone, agreed 2026-08-28: the human calls heads or tails as the visitor, the winner chooses receive, kick, defer, or an end to defend, and the kicking and receiving sides each pick a real kickoff call (deep, squib, pooch, onside for the kicking team; regular return or hands team for the receiving one). This absorbs the older item below.
+
 Onside kicks, and a suggest-and-accept moment around the kickoff itself. The fourth-down half of DESIGN.md 8.4 is built (see Done, below); kickoffs still run automatically. See DESIGN_PROPOSALS.md proposal 3 for why this was split off rather than built the same night: it needs a real recovery-rate mechanic, not a UI wrapper around something the engine already does.
+
+The OC shell-read clause: at full verbosity on offense, when the offensive coordinator has a confident read of the defensive shell, one short clause in the suggestion line about what they are showing, filtered through his belief store so a bad staff can be wrong about it (DESIGN.md 24.1). Deliberately deferred from the 2026-08-28 reported-information pass to keep it conservative; the T key already gives tendencies on demand.
 
 ## Tuning
 
-(Empty. Fumbles lost were checked and deliberately left; see Done, below, and BALANCE_NOTES.md.)
+The engine's defensive coordinator reads stale personnel for one snap after a turnover: buildSuggestion hands chooseDefense the personnel of whatever offense ran the last snap, which after a change of possession is the other team's. The spoken line was fixed in the whistle session (it now says there is no look yet), but the engine-side call still leans on the stale value. Fixing it changes what a seed replays, so it belongs in a deliberate engine pass with the harness run before and after, not a quick patch. Found by the session 3 audit; details in REVIEW_NOTES.md.
+
+(Fumbles lost were checked and deliberately left; see Done, below, and BALANCE_NOTES.md.)
 
 ## Needs a decision
 
@@ -38,6 +47,12 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+The referee whistle (2026-08-28). One of the eight whistles in audio/ref plays between a play's result and the next play's prompt, marking the ball ready for play. Built on the three patterns from the accessible golf audio engine: Audio elements created once at the Begin click, a grab bag so no clip repeats until all eight have been heard, and the next utterance gated on the clip's ended event rather than a duration guess. The shuffle draws from its own clock-seeded Rng so the game's seed replays exactly as before. The announce queue gained segments (ui/core.js) so the result and the prompt are two utterances with the whistle in the gap, and the play clock now starts at the whistle, like real football. Commit: "Milestone 9: the whistle and the coach's ears".
+
+The seed on Shift Tab (2026-08-28). Tab stays the short situation line; Shift Tab speaks the seed as digits, for reporting anything noticed in play. Documented in help and the keyboard explorer. Same commit.
+
+Defensive awareness of the offense (2026-08-28). Before the coach's own defensive call, the prompt now says what personnel the offense is showing, which is exactly the look the engine's own defensive coordinator is handed (DESIGN.md 16.5, 24.1) - neither more nor less. On the first defensive snap, before any look exists, it says so instead of guessing. Personnel groupings already existed on every formation; no new attributes were added. Same commit.
 
 Save and load a whole game in progress (DESIGN.md 21.10). engine/save.js serialises a controller to JSON, tagging every player reference outside the roster that owns him so loading can rebuild real object identity rather than disconnected copies; test/save_test.js plays twenty snaps, saves mid-decision (after the coordinator's suggestion has already drawn from the seed but before the play is called), loads into a fresh controller, and checks twenty more snaps replay word for word. G saves to a file, Shift G and the main menu's Load open the file picker, and the main menu's Resume reads the crash copy that is now written to localStorage after every decision point. Commit: "Milestone 5a: save and load".
 

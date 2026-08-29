@@ -83,3 +83,27 @@ Real keys with no meaning on a fourth-down suggestion (N, D, U, all of which mea
 Whether special teams delegation should be gated by offenseMode alone, with no dependence on defenseMode, was previously decided only in code and argued in DESIGN_PROPOSALS.md, not written into DESIGN.md 8.4 itself. Added as a status note to 8.4, a fact rather than a decision change, so the actual rule is no longer only inferable from a proposals document.
 
 Whether full verbosity should add anything to the fourth-down suggestion the way it adds a play's description on offense was flagged as worth a one-line confirmation from Brian rather than a bug: there is no equivalent detail to add (a punt, a kick, or going for it does not have a scheme description the way a play concept does), so the two verbosity levels being identical here looks correct rather than missing something.
+
+## Accessibility auditor, session 3, after the whistle
+
+The auditor read main.js, the queue segmentation in ui/core.js, the clip pool in ui/dom.js, the boundary placement in ui/screens.js, and offenseShows in engine/controller.js, hunting the class of bug the first audit found in the pacing timer: an asynchronous continuation firing into something the coach has open, and speech lost or doubled across the new gaps. Eight findings, four of them real. All four real ones were fixed the same session, plus two of the theoretical ones cheaply; two were logged and left.
+
+### Fixed
+
+The delay of game penalty was silent, and had been since the play clock was built. The controller's delayOfGame drains its own queue and returns what was said; main.js discarded that return and drained again, which is empty, so the coach heard the must tone and then the next prompt while the ball had silently moved five yards. This is the exact double-drain trap ui/screens.js documents on emit, on the other side of the same contract. main.js now emits what delayOfGame returns. Pre-existing, not introduced by the whistle work, but found by it.
+
+A coach stalling on his own defensive call was rewarded with five free yards. The play clock armed for defensive decisions too, and expiry always charged the offense, who in that situation is the opponent, with delay of game. DESIGN.md 16.5.1 says the offense takes the penalty, and real defenses cannot flag their opponent by dawdling. A defensive expiry now snaps the ball with the coordinator's suggested call and says so; an offensive expiry still takes the flag. Also pre-existing.
+
+After a turnover, the defensive look line reported the coach's own formation as the opponent's. lastOffFormation held whatever offense ran the last snap, with no memory of whose offense that was, so an interception thrown from the Spread produced "They show eleven personnel" about a team that had not lined up yet. The controller now records which team's offense ran the snap, offenseShows only claims a look when it was a look at the team that has the ball now, and the new field rides through a save. The engine's own defensive coordinator is still handed the stale personnel for its first call after a turnover, which is a modeling wart with the same shape; fixing that changes what a seed replays, so it is logged in ISSUES.md for a proper engine pass rather than patched here.
+
+C, pressed during the whistle gap, offered a line the coach had not heard yet, and speaking it doubled the suggestion inside one utterance. The repeat buffer was written when a line was queued; it is now written when the line is actually spoken, carried by a report flag on each queue item, so C always repeats the last thing that reached the coach's ears.
+
+The whistle continuation now re-checks the open-interface guards, mirroring the auto-advance continuation. Today the check can never fire, because only a keypress can open anything and every keypress invalidates the continuation's generation, but the auditor is right that the asymmetry between the two continuations was itself the hazard; the guard and the reasoning are now written at the site. And a keypress now silences a whistle still sounding, not just its continuation, because the coach's key takes precedence over everything, including our own audio.
+
+### Left, with reasons
+
+An exception inside a key handler leaves the timers dead until the next keypress, because the catch path announces the error but does not re-arm. Escape recovers, the announcement tells the coach to press it, and re-arming from inside a failure path risks re-throwing into a loop. Accepted as the safer of the two behaviours; pre-existing shape.
+
+AF.main.restart reuses start() without resetting the whistle generation or in-flight continuations. Nothing calls restart today. Logged so whoever wires a caller to it reads this first.
+
+The auditor also noted that main.js has no Node coverage at all, so the whistle sequencing, the generation counter, and both play clock expiry branches rest on reading and on the browser pass rather than on the suite. True, and worth a harness for the timers eventually; the queue segmentation and the boundary placement that decide what is spoken are covered, at 367 checks.

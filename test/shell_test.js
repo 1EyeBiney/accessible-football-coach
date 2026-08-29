@@ -522,4 +522,88 @@ module.exports = function (t) {
              'F12 then F on a fourth down describes the fourth down options list, not the formation list');
         t.ok(described.indexOf('formation list') < 0, 'F12 then F on a fourth down does not describe the offensive formation list');
     }
+
+    // ---------- the whistle boundary, the seed key, and the defensive look ----------
+    // (ISSUES.md 2026-08-28.) The out object gains an optional boundary
+    // callback: screens must place it between a play's result and the next
+    // play's prompt so main.js can put the referee whistle in the gap.
+    var events = [];
+    var d19 = driver(AF);
+    d19.app.out.boundary = function () { events.push('[boundary]'); };
+    var origSay = d19.app.out.say;
+    d19.app.out.say = function (text, priority, source) {
+        events.push(text);
+        origSay(text, priority, source);
+    };
+    AF.screens.boot(d19.app);
+    d19.key('Enter').key('Enter').key('Enter');
+    t.ok(events.indexOf('[boundary]') >= 0, 'entering the game places a whistle boundary before the first prompt');
+
+    // Play a stretch of snaps; every one that produced a result and a next
+    // prompt must have a boundary between them, never after the prompt.
+    var g19 = 0, sawSnap = false;
+    while (d19.app.state.mode === 'game' && g19++ < 120) {
+        events.length = 0;
+        if (d19.app.state.viewer) { d19.key('Escape'); continue; }
+        if (d19.app.step === 'sub-answer') { d19.key('n'); continue; }
+        var stepBefore = d19.app.step;
+        d19.key('Enter');
+        if (d19.app.state.mode !== 'game') break;
+        if ((stepBefore === 'offense-suggest' || stepBefore === 'defense-suggest') &&
+            (d19.app.step === 'offense-suggest' || d19.app.step === 'defense-suggest')) {
+            sawSnap = true;
+            var b = events.indexOf('[boundary]');
+            t.ok(b > 0, 'a snap places the boundary after the result, not before it');
+            t.ok(b < events.length - 1, 'and the next prompt comes after the boundary');
+            break;
+        }
+        if (d19.app.state.mode === 'halftime') { d19.key('Enter'); }
+    }
+    t.ok(sawSnap, 'the driver reached a snap with a result and a following prompt');
+
+    // Shift Tab reads the seed as a number a coach can write down.
+    var n19 = d19.count();
+    d19.key('Tab', true);
+    var seedLine = d19.since(n19);
+    t.ok(/Seed \d+/.test(seedLine), 'Shift Tab speaks the seed as digits');
+    t.eq(String(d19.app.game.game.rng.seed), (seedLine.match(/Seed (\d+)/) || [])[1],
+         'and it is the seed this game was built from');
+
+    // Before a defensive call, the coach hears the personnel the offense is
+    // showing, which is the same look chooseDefense is handed.
+    var d20 = driver(AF);
+    AF.screens.boot(d20.app);
+    d20.key('Enter').key('Enter').key('Enter');
+    var g20 = 0, sawDefLook = false;
+    while (d20.app.state.mode === 'game' && g20++ < 400) {
+        if (d20.app.state.viewer) { d20.key('Escape'); continue; }
+        if (d20.app.step === 'sub-answer') { d20.key('n'); continue; }
+        if (d20.app.state.mode === 'halftime') { d20.key('Enter'); continue; }
+        var m = d20.count();
+        d20.key('Enter');
+        if (d20.app.step === 'defense-suggest') {
+            var prompt = d20.since(m).toLowerCase();
+            if (prompt.indexOf('personnel') >= 0) { sawDefLook = true; break; }
+        }
+    }
+    t.ok(sawDefLook, 'a defensive prompt says what personnel the offense is showing');
+
+    // After a turnover, the last formation seen belongs to the coach's own
+    // offense; reporting it as the opponent's would be a false claim spoken
+    // as fact (found by the whistle audit). White-box on purpose: driving a
+    // real interception on demand is not deterministic, the field logic is.
+    var C20 = AF.controller, g20b = d20.app.game;
+    g20b.lastOffFormation = 'SPREAD';
+    g20b.lastOffTeam = g20b.game.off;
+    t.ok(C20.offenseShows(g20b).indexOf('personnel') > 4,
+         'a look at the team that has the ball now is reported');
+    g20b.lastOffTeam = 1 - g20b.game.off;
+    t.eq(C20.offenseShows(g20b), 'No look at their personnel yet.',
+         'a look at the other team, as after a turnover, is never reported as a look at this one');
+
+    // The look survives a save and a load, so a resumed game does not claim
+    // ignorance it did not have.
+    g20b.lastOffTeam = g20b.game.off;
+    var roundTrip = AF.save.deserialize(d20.app.deps, AF.save.serialize(g20b));
+    t.eq(roundTrip.lastOffTeam, g20b.lastOffTeam, 'lastOffTeam round-trips through a save');
 };

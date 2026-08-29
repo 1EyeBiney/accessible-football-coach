@@ -93,9 +93,13 @@
         if (!text) return;
         var clean = U().sanitize(text);
         priority = priority || 'result';
-        if (REAL[priority] && !app.uiChatter) app.state.lastReport = clean;
+        var isReport = !!(REAL[priority] && !app.uiChatter);
+        // Set here for the Node drivers that speak immediately; main.js sets
+        // it again at speak time, which wins in the browser, so C never
+        // offers a line still held behind the whistle boundary.
+        if (isReport) app.state.lastReport = clean;
         app.lastSaid = clean;
-        app.out.say(clean, priority, source || null);
+        app.out.say(clean, priority, source || null, isReport);
     }
 
     // Wraps a bit of interface talk so it does not overwrite the last report.
@@ -121,6 +125,12 @@
     }
 
     function tone(app, name) { if (app.out.tone) app.out.tone(name); }
+
+    // The ready-for-play boundary: everything said so far is the old play,
+    // everything after belongs to the next one, and the interface plays the
+    // referee whistle in the gap (ISSUES.md 2026-08-28). Optional on the out
+    // object so the Node test drivers that predate it keep working.
+    function boundary(app) { if (app.out.boundary) app.out.boundary(); }
 
     // ---------- screen transitions ----------
 
@@ -184,6 +194,7 @@
         app.step = null;
         app.state.lastContext = 'the game';
         flush(app);
+        boundary(app);
         promptNext(app);
     }
 
@@ -237,12 +248,13 @@
             say(app, 'Press Enter to return to the menu.', 'batched');
         } else {
             say(app, 'Resumed. ' + C.situationLine(controller), 'result');
+            boundary(app);
             promptNext(app);
         }
     }
 
     // The picker and the crash copy both finish outside the normal key
-    // press, so nothing is waiting to call speakQueue() the way main.js does
+    // press, so nothing is waiting to drain the queue the way main.js does
     // after every key. AF.main.announceNow() is the same drain-and-speak the
     // pacing timer uses for the same reason, exposed for this one other
     // caller (main.js).
@@ -383,6 +395,11 @@
         var s = C.suggestion(app.game, side);
         app.step = side === 'offense' ? 'offense-suggest' : 'defense-suggest';
         app.suggested = s;
+        // Real defenses match personnel: before the coach's own defensive
+        // call, say what the offense is showing, which is exactly what the
+        // engine's own coordinator is handed (DESIGN.md 16.5, ISSUES.md
+        // 2026-08-28 on defensive awareness).
+        if (side === 'defense' && C.offenseShows) say(app, C.offenseShows(app.game), 'result');
         var line = s.text;
         if (app.state.verbosity === 'full' && s.describe) line += ' ' + s.describe;
         say(app, line + ' Enter accepts.', 'result', side === 'offense' ? 'OC' : 'DC');
@@ -456,6 +473,15 @@
             if (app.game) CTRL().setVerbosity(app.game, state.verbosity);
             chatter(app, vsay);
             return { say: 'verbosity' };
+        }
+        if (key.name === 'Tab' && key.shift) {
+            // The seed is how a coach reports a bug from play: it replays the
+            // whole game (ISSUES.md 2026-08-28). Digits on purpose: a seed is
+            // a number to write down, not prose, and the sanitiser leaves
+            // numbers this large alone.
+            say(app, app.game ? 'Seed ' + app.game.game.rng.seed + '.'
+                              : 'No game running, so there is no seed.', 'result');
+            return { say: 'seed' };
         }
         if (key.name === 'Tab') {
             say(app, app.game ? CTRL().situationLine(app.game) : contextLine(app), 'result');
@@ -676,6 +702,7 @@
             if (!item) return { say: null };
             app.state.mode = 'game';
             emit(app, CTRL().halftimeChoice(app.game, item.id));
+            boundary(app);
             promptNext(app);
             return { say: 'chosen' };
         }
@@ -899,6 +926,7 @@
             say(app, 'Press Enter to return to the menu.', 'batched');
             return;
         }
+        boundary(app);
         promptNext(app);
     }
 
