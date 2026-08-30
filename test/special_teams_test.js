@@ -49,6 +49,7 @@ function driveToSpecial(c, guardMax) {
         else if (p.kind === 'tosschoice') { C.callTossChoice(c, C.tossChoices(c).recommendation); }
         else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
         else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
+        else if (p.kind === 'defspecial') { C.callDefSpecial(c, C.defSpecialChoices(c).recommendation); }
         else if (p.kind === 'auto') { C.advance(c); }
         C.reports(c);
     }
@@ -121,6 +122,7 @@ module.exports = function (t) {
         else if (pp.kind === 'tosschoice') { C.callTossChoice(opp, C.tossChoices(opp).recommendation); }
         else if (pp.kind === 'kickoff') { C.callKickoff(opp, C.kickoffChoices(opp).recommendation); }
         else if (pp.kind === 'pat') { C.callPat(opp, C.patChoices(opp).recommendation); }
+        else if (pp.kind === 'defspecial') { C.callDefSpecial(opp, C.defSpecialChoices(opp).recommendation); }
         else if (pp.kind === 'auto') { C.advance(opp); }
         C.reports(opp);
     }

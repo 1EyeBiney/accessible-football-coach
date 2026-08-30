@@ -115,7 +115,8 @@
         if (app.state.mode === 'game' && app.game) {
             var line = CTRL().situationLine(app.game);
             if (app.step === 'offense-suggest' || app.step === 'defense-suggest' || app.step === 'special-suggest' ||
-                app.step === 'toss-choice' || app.step === 'kickoff-call' || app.step === 'pat-call') {
+                app.step === 'toss-choice' || app.step === 'kickoff-call' || app.step === 'pat-call' ||
+                app.step === 'defspecial-call') {
                 return line + ' ' + (app.suggested ? app.suggested.text : '') + ' Enter accepts.';
             }
             if (app.step === 'toss-call') return line + ' Call the toss: H for heads, T for tails.';
@@ -423,6 +424,13 @@
             say(app, pc.text + ' Enter accepts, or F for your options.', 'result', 'ST');
             return;
         }
+        if (p.kind === 'defspecial') {
+            var dsc = C.defSpecialChoices(app.game);
+            app.step = 'defspecial-call';
+            app.suggested = dsc;
+            say(app, dsc.text + ' Enter accepts, or F for your other calls.', 'result', 'DC');
+            return;
+        }
         if (p.kind === 'kickoff') {
             var kc = C.kickoffChoices(app.game);
             app.step = 'kickoff-call';
@@ -704,6 +712,12 @@
             afterSnap(app, CTRL().callPat(app.game, item.id));
             return { say: 'patcall' };
         }
+        if (v.kind === 'defspecialcall') {
+            app.state.viewer = null;
+            tone(app, 'close');
+            afterSnap(app, CTRL().callDefSpecial(app.game, item.id));
+            return { say: 'defspecialcall' };
+        }
         if (v.kind === 'defpart') {
             app.state.viewer = null;
             nextDefensePart(app, item.id);
@@ -888,6 +902,7 @@
         if (app.step === 'toss-choice') return tossChoiceKey(app, key);
         if (app.step === 'kickoff-call') return kickoffKey(app, key);
         if (app.step === 'pat-call') return patKey(app, key);
+        if (app.step === 'defspecial-call') return defSpecialKey(app, key);
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
@@ -995,6 +1010,16 @@
             return { say: 'called' };
         }
         if (key.name === 'f') { openChoiceList(app, 'patcall', CTRL().patChoices(app.game)); return { say: 'pat-list' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function defSpecialKey(app, key) {
+        if (key.name === 'Enter') {
+            afterSnap(app, CTRL().callDefSpecial(app.game, app.suggested.recommendation));
+            return { say: 'called' };
+        }
+        if (key.name === 'f') { openChoiceList(app, 'defspecialcall', CTRL().defSpecialChoices(app.game)); return { say: 'defspecial-list' }; }
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }

@@ -7,9 +7,6 @@ An item marked "before next build" is fixed before any new feature work starts. 
 ## From play (Brian writes here)
 
 (Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Shift Tab reads the current seed on the game screen.)
-I was on defense with Riverton (shouldn't matter) and held the offense short of 1st down the first 3 downs so that the computer decided to punt, but I was not given any choices at all for 4th down, the computer once it decided to punt, just punted the ball. I would like the defense to decide on punt return, punt block or i guess other and be able to pick a defense if they think the defense is going for it. this would be something that needs done for 2-player mode anyway and is part of the real football game process so we need it in here too.
-
-likewise later, on a short 4th down, the computer decided to go for it rather than kick a fairly short field goal but I did not get to choose the defense, or FG block or FG safe or any choice, the computer once it decided to go for it, the play just ran.
 
 
 all penalties should be coach choices as whether to accept or reject the penalty and we need to figure out how to do that like real coaches get with the information on what happens if the play stands and such.
@@ -25,8 +22,6 @@ Thinking more abou the head coaching experience and what some users might want w
 
 ## Not started
 
-Special teams name nobody. Kickoffs, punts, field goals and extra points speak no player at all, in any naming mode, so a coach never learns who his kicker, his punter or his returner is - the one group of players he has no other way to meet. The position labels and the naming modes are all in place; the kicking game simply was not wired into them. Found by the session 5 milestone review.
-
 Defend-an-end at the toss. The real toss offers a winner the choice of which goal to defend; the engine has no wind, weather, or field direction for that choice to mean anything yet, so it is deliberately not offered (a choice that changes nothing would be dishonest). If an elements model ever arrives, the toss flow has the natural slot for it.
 
 The OC shell-read clause: at full verbosity on offense, when the offensive coordinator has a confident read of the defensive shell, one short clause in the suggestion line about what they are showing, filtered through his belief store so a bad staff can be wrong about it (DESIGN.md 24.1). Deliberately deferred from the 2026-08-28 reported-information pass to keep it conservative; the T key already gives tendencies on demand.
@@ -38,8 +33,6 @@ The defense seeing the offense's personnel and answering it with a substitution,
 A pre-snap penalty on a two-point try ends the try instead of replaying it: runPlay's two-point path returns before any penalty handling, so a false start reads "Two point try: Penalty, false start, five yards. The try is no good." Coherent speech, wrong football. Pre-existing (the old synchronous try ignored penalties the same way); fixing it adds draws to a rare path, so it wants a deliberate engine pass with the harness run before and after. Two-point snaps also count in the regular stats (play calls, attempts, belief averages) as ordinary snaps. Both found by the session 6 audit.
 
 The offensive line slides a position when one man is rested. offenseLineup fills its five slots from whoever is available rather than substituting into a specific slot, so benching the left tackle makes the left guard the left tackle, the center the left guard, and so on down the line. Real teams put a backup tackle at tackle. The position labels made this audible rather than causing it - eleven offensive players a game are called more than one thing, against 0.12 on defense where labels follow the depth chart - but fixing it changes which lineman blocks which defender and therefore the harness, so it wants a deliberate engine pass with the numbers run before and after. Found by the session 5 milestone review.
-
-The engine's defensive coordinator reads stale personnel for one snap after a turnover: buildSuggestion hands chooseDefense the personnel of whatever offense ran the last snap, which after a change of possession is the other team's. The spoken line was fixed in the whistle session (it now says there is no look yet), but the engine-side call still leans on the stale value. Fixing it changes what a seed replays, so it belongs in a deliberate engine pass with the harness run before and after, not a quick patch. Found by the session 3 audit; details in REVIEW_NOTES.md.
 
 (Fumbles lost were checked and deliberately left; see Done, below, and BALANCE_NOTES.md.)
 
@@ -61,6 +54,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+Their fourth down is your call (2026-08-29, from Brian's play notes: "the computer once it decided to punt, just punted the ball", and the go-for-it snap that ran without a defensive call). When the opponent shows the punt unit you set up the return, go for the block, or punt safe; when they show the field goal unit you rush the kick or play it safe; and when they keep the offense on the field you call a defense like any other snap, in every delegation mode that asks. The block is a real gamble - about one punt in twenty-five and one field goal in eighty when called, paid for in return yards, with a fake gaining against a committed rush - and the computer defense uses the same calls from the same public window, so blocks happen to you too. Punts now name the punter and the returner. The stale-personnel bug from the session 3 audit rode along in the same seed-breaking pass: the engine's coordinator no longer reads the other team's formation for a snap after a turnover. Numbers before and after in BALANCE_NOTES.md. Commit: "Milestone 15: the defense's fourth down".
 
 The try is your call (2026-08-29, from Brian's play notes: the computer was kicking the extra point for him). After your own touchdown, Enter kicks and F offers going for two - a real snap from the three, finally described in full ("Two point try: Mesh from Spread... The try is good.") where the old line said "two point try fails" with no word of what was run. Gated like the kickoff: always asked in full control, only when the score genuinely makes two worth a thought on the stop-me setting (fourth quarter, down two, down five, down eight, or up one), never when delegated; the opponent's tries are never your question. The kicker is named on extra points and field goals now. In overtime the rotation waits for the try, because whether overtime continues depends on the point it produces. Commit: "Milestone 14: the try".
 

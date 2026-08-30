@@ -232,14 +232,39 @@
         if (c.game.ot && c.game.otRotate) return { kind: 'auto', reason: 'overtime' };
         if (victoryFormationComing(c)) return { kind: 'auto', reason: 'victory formation' };
         if (c.game.down === 4) {
-            // Not the coach's ball: the automatic coach's fourth-down call is
-            // never a decision he is asked about, the same as any other snap
-            // the other sideline runs (DESIGN.md 24.1).
-            if (c.game.off !== c.coach) return { kind: 'auto', reason: 'special teams' };
-            var stMode = c.offenseMode; // it is his possession either way
-            if (stMode === 'COORD') return { kind: 'auto', reason: 'special teams' };
-            if (stMode === 'KEY' && !worthStopping(c)) return { kind: 'auto', reason: 'special teams' };
-            return { kind: 'special' };
+            if (c.game.off !== c.coach) {
+                // The other sideline's decision is public the moment its
+                // unit trots out: fourthDownDecision draws nothing, so
+                // reading it here is watching the field, not the call
+                // sheet (DESIGN.md 24.1; ISSUES.md 2026-08-29, from
+                // Brian's play notes - "the computer once it decided to
+                // punt, just punted the ball").
+                var od = c.game.ot ? c.deps.game.otFourthDownDecision(c.game, c.game.off)
+                                   : c.deps.game.fourthDownDecision(c.game, c.game.off);
+                if (od === 'punt' || od === 'fg') {
+                    var dmode = c.defenseMode;
+                    if (dmode === 'COORD') return { kind: 'auto', reason: 'special teams' };
+                    // The stop-me setting interrupts only when the call
+                    // genuinely matters: a punt in the desperation window,
+                    // where the block is the recommended gamble. A field
+                    // goal's standard call is already the rush, so there is
+                    // nothing routine to stop for.
+                    if (dmode === 'KEY' &&
+                        !(od === 'punt' && c.deps.game.defSpecialCall(c.game, c.coach, 'punt') === 'BLOCK')) {
+                        return { kind: 'auto', reason: 'special teams' };
+                    }
+                    return { kind: 'defspecial', unit: od };
+                }
+                // They are staying on the field: the normal defensive call
+                // flow below applies, which is what fixes "the play just
+                // ran" - the coach's defense was silently skipped on every
+                // opponent go-for-it.
+            } else {
+                var stMode = c.offenseMode; // it is his possession
+                if (stMode === 'COORD') return { kind: 'auto', reason: 'special teams' };
+                if (stMode === 'KEY' && !worthStopping(c)) return { kind: 'auto', reason: 'special teams' };
+                return { kind: 'special' };
+            }
         }
         var mine = offenseIsCoach(c);
         var mode = sideMode(c, mine);
@@ -481,7 +506,16 @@
         }
         var dteam = g.teams[1 - g.off];
         var offTeam = g.teams[g.off];
-        var personnel2 = PL.FORMATIONS[c.lastOffFormation || 'SPREAD'].personnel;
+        // A look only counts when it was a look at the team that has the
+        // ball now: after a turnover, lastOffFormation belongs to the other
+        // team, and the engine's own coordinator was quietly reading the
+        // wrong team's personnel for one snap while the spoken line
+        // correctly said there was no look yet (ISSUES.md, session 3 audit;
+        // fixed in the same seed-breaking pass as the defensive fourth
+        // down). The per-team memory is the honest fallback.
+        var lookForm = (c.lastOffFormation && c.lastOffTeam === g.off) ? c.lastOffFormation
+                     : (c.seenOffFormation[g.off] || 'SPREAD');
+        var personnel2 = PL.FORMATIONS[lookForm].personnel;
         var dc = c.deps.game.chooseDefense(g, dteam, sit, offTeam, personnel2, 1 - g.off, c.deps);
         var dh = dteam.live.dcHunch;
         c.lastDefFront = dc.front;
@@ -681,6 +715,40 @@
         return advance(c);
     }
 
+    // The defense's answer to the kicking unit it is shown (DESIGN.md 8.4;
+    // ISSUES.md 2026-08-29). Deterministic; no cache needed.
+    var PUNT_DEF_OPTIONS = [
+        { id: 'RETURN', text: 'Set up the return.' },
+        { id: 'BLOCK', text: 'Go for the block. Everyone comes; it costs you the return, and a fake gains against it.' },
+        { id: 'SAFE', text: 'Punt safe. Nobody rushes, and a fake gains nothing.' }
+    ];
+    var FG_DEF_OPTIONS = [
+        { id: 'BLOCK', text: 'Rush the kick.' },
+        { id: 'SAFE', text: 'Field goal safe. Nobody rushes, and a fake gains nothing.' }
+    ];
+
+    function defSpecialChoices(c) {
+        var p = c.pending;
+        if (!p || p.kind !== 'defspecial') return null;
+        var unit = p.unit;
+        var rec = c.deps.game.defSpecialCall(c.game, c.coach, unit);
+        var shown = unit === 'fg' ? 'They show the field goal unit.' : 'They show the punt unit.';
+        var recSay = rec === 'BLOCK' ? (unit === 'fg' ? 'Rush the kick.' : 'You need the ball back. Go for the block.')
+                                     : 'Set up the return.';
+        return { unit: unit, recommendation: rec,
+                 text: shown + ' ' + recSay,
+                 options: (unit === 'fg' ? FG_DEF_OPTIONS : PUNT_DEF_OPTIONS).slice() };
+    }
+
+    function callDefSpecial(c, id) {
+        var p = c.pending;
+        if (!p || p.kind !== 'defspecial') return fail(c, 'There is no kick to defend.');
+        var opts = p.unit === 'fg' ? FG_DEF_OPTIONS : PUNT_DEF_OPTIONS;
+        if (!opts.some(function (o) { return o.id === id; })) return fail(c, 'That is not a call against this unit.');
+        c.forcedDefSpecial = { call: id };
+        return advance(c);
+    }
+
     var ST_CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'your call, coach' };
 
     // Punt, field goal, go for it, or a fake, with the same confidence
@@ -875,6 +943,10 @@
             var fp = c.forcedPat;
             hooks.patCall = function () { return fp.call; };
         }
+        if (c.forcedDefSpecial) {
+            var fds = c.forcedDefSpecial;
+            hooks.defSpecial = function () { return fds.call; };
+        }
         g.hooks = hooks;
         c.lastOffFormation = null;
         // The decision count for the career (DESIGN_PROPOSALS.md proposal 4,
@@ -885,6 +957,7 @@
         var hadForcedOffense = !!c.forcedOffense, hadForcedDefense = !!c.forcedDefense;
         var hadForcedSpecial = !!(c.forcedSpecial || c.forcedKick || c.forcedReceive);
         var hadForcedPat = !!c.forcedPat;
+        var hadForcedDefSpecial = !!c.forcedDefSpecial;
         // Whose offense is about to run this snap. Recorded before the step
         // because a turnover flips g.off inside it, and a look at one team's
         // personnel must never be reported as a look at the other's (found by
@@ -904,7 +977,7 @@
         var res = deps.game.stepGame(g, deps);
         c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null;
         c.forcedToss = null; c.forcedTossChoice = null; c.forcedKick = null; c.forcedReceive = null;
-        c.forcedPat = null;
+        c.forcedPat = null; c.forcedDefSpecial = null;
         g.hooks = null;
         c.snapId++;
         c.suggestCache = {};
@@ -941,6 +1014,13 @@
             // The quarter guard keeps a clock rollover at a stale fourth
             // down from counting as a decision nobody made.
             if (hadForcedSpecial || hadForcedOffense) c.decisions.coach++;
+            else c.decisions.staff++;
+        } else if (!wasTossStep && before.quarter === g.quarter &&
+                   downBefore === 4 && offBefore !== c.coach) {
+            // The mirror: the opponent's punt or field goal carries one
+            // decision for the coach's defense - the return, the block, or
+            // the safe call (ISSUES.md 2026-08-29).
+            if (hadForcedDefSpecial) c.decisions.coach++;
             else c.decisions.staff++;
         }
 
@@ -1208,6 +1288,7 @@
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
                 patChoices: patChoices, callPat: callPat,
+                defSpecialChoices: defSpecialChoices, callDefSpecial: callDefSpecial,
                 callToss: callToss, tossChoices: tossChoices, callTossChoice: callTossChoice,
                 kickoffChoices: kickoffChoices, callKickoff: callKickoff,
                 answerSubstitution: answerSubstitution, advance: advance,

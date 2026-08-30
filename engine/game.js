@@ -482,21 +482,103 @@
         return ids && ids.length ? team.roster.byId[ids[0]] : null;
     }
 
-    function punt(game, offIdx, deps) {
+    // The returner: the fastest back or receiver on the depth chart who can
+    // go. A deterministic read, no draw, so naming him costs the seed
+    // nothing (ISSUES.md, special teams name nobody).
+    function returner(team, P) {
+        var d = team.roster.depth, byId = team.roster.byId, best = null, bv = -1;
+        ['WR', 'RB'].forEach(function (pos) {
+            (d[pos] || []).forEach(function (id) {
+                var p = byId[id];
+                if (!p || p.live.out || p.live.benched) return;
+                var v = P.eff(p, 'spd');
+                if (v > bv) { bv = v; best = p; }
+            });
+        });
+        if (best) best.live.slot = 'returner';
+        return best;
+    }
+
+    // The defense's best shot at getting a hand on a kick: the strongest
+    // blitzer or rusher it has. Deterministic read, no draw.
+    function bestRusher(team, P) {
+        var d = team.roster.depth, byId = team.roster.byId, best = null, bv = -1;
+        ['DL', 'LB'].forEach(function (pos) {
+            (d[pos] || []).forEach(function (id) {
+                var p = byId[id];
+                if (!p || p.live.out || p.live.benched) return;
+                var v = P.eff(p, pos === 'DL' ? 'prs' : 'blz');
+                if (v > bv) { bv = v; best = p; }
+            });
+        });
+        return best;
+    }
+
+    // What the computer defense calls against a shown kicking unit. The
+    // desperation window mirrors the onside one: late, trailing, needing
+    // the ball back, a block attempt is worth its cost. A field goal rush
+    // is the standard call; punt safe and field goal safe exist for the
+    // coach who smells a fake, which today only a human offense runs.
+    function defSpecialCall(game, defIdx, unit) {
+        if (unit === 'fg') return 'BLOCK';
+        var diff = game.score[defIdx] - game.score[1 - defIdx];
+        var desperate = game.quarter >= 4 && game.clock <= 240 && diff < 0 && diff >= -16;
+        return desperate ? 'BLOCK' : 'RETURN';
+    }
+
+    // dcall is the defense's answer to the punt unit: RETURN (the default,
+    // and exactly the old behaviour), BLOCK (a real shot at the kick, paid
+    // for in return yards and in what a fake does to a committed rush), or
+    // SAFE (nobody rushes, the return is conceded, a fake gains nothing).
+    // DESIGN.md 8.4; ISSUES.md 2026-08-29, from Brian's play notes.
+    function punt(game, offIdx, deps, dcall) {
         var rng = game.rng, P = deps.players;
+        var defIdx = 1 - offIdx;
+        dcall = dcall || 'RETURN';
         var pu = kicker(game.teams[offIdx], 'P', P);
+        if (pu) pu.live.slot = 'punter';
+        var puSay = pu ? P.sayPlayer(pu, game.naming || 'both') : 'the punter';
         var leg = pu ? P.eff(pu, 'leg') : 40, kacc = pu ? P.eff(pu, 'kacc') : 40;
+
+        // The block attempt comes first, because a blocked punt never gets
+        // its distance. Rare even when called: a good rusher gets a hand on
+        // roughly one punt in twenty he rushes.
+        if (dcall === 'BLOCK') {
+            var rusher = bestRusher(game.teams[defIdx], P);
+            var pBlock = clamp(0.02 + ((rusher ? P.eff(rusher, 'blz') : 40) - 45) * 0.0008, 0.01, 0.06);
+            if (rng.chance(pBlock)) {
+                var scoop = Math.round(clamp(rng.normal(4, 4), 0, 12));
+                var spot = clamp(game.ball - scoop, 1, 99);
+                var rSay = rusher ? P.sayPlayer(rusher, game.naming || 'both') : 'the rush';
+                game.stats[offIdx].punts++;
+                game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'punt',
+                                text: puSay + "'s punt is blocked by " + rSay + '. ' +
+                                      game.teams[defIdx].name + ' take over.' });
+                game.clock = Math.max(0, game.clock - 4);
+                setPossession(game, defIdx, 100 - spot);
+                return;
+            }
+        }
+
         var dist = Math.round(clamp(34 + (leg - 45) * 0.25 + rng.normal(0, 6), 12, 62));
         if (rng.chance(clamp(0.08 - (kacc - 45) * 0.002, 0.02, 0.15))) dist = Math.round(dist * 0.55); // shank
         var ret = Math.round(clamp(rng.normal(5, 5), 0, 25));
+        // A rush-committed unit has nobody back to block for the return; a
+        // safe unit concedes it and just gets the ball down.
+        if (dcall === 'BLOCK') ret = Math.round(ret * 0.5);
+        if (dcall === 'SAFE') ret = Math.round(ret * 0.6);
         var ball = game.ball + dist; // yards from offense's own goal
         var text;
-        if (ball >= 100) { ball = 100 - RULES.HS.touchback; text = 'punt into the end zone, touchback.'; }
+        if (ball >= 100) { ball = 100 - RULES.HS.touchback; text = puSay + ' punts into the end zone, touchback.'; }
         else {
             ball = Math.max(1, ball - ret);
+            var rMan = ret ? returner(game.teams[defIdx], P) : null;
             // "Returned zero" is not something anybody says, and without the
             // full stop the line ran straight into the situation after it.
-            text = 'punt of ' + dist + ' yards' + (ret ? ', returned ' + ret : ', no return') + '.';
+            text = puSay + ' punts ' + dist + ' yards' +
+                   (ret ? (rMan ? ', ' + P.sayPlayer(rMan, game.naming || 'both') + ' returns ' + ret
+                                : ', returned ' + ret)
+                        : ', no return') + '.';
         }
         game.stats[offIdx].punts++;
         game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'punt', text: text });
@@ -504,11 +586,33 @@
         setPossession(game, 1 - offIdx, 100 - ball);
     }
 
-    function fieldGoal(game, offIdx, deps) {
+    // dcall against the field goal unit: BLOCK (the standard rush, with a
+    // real if small shot at the kick) or SAFE (nobody rushes; the answer to
+    // a smelled fake).
+    function fieldGoal(game, offIdx, deps, dcall) {
         var rng = game.rng, P = deps.players;
+        var defIdx = 1 - offIdx;
+        dcall = dcall || 'BLOCK';
         var K = kicker(game.teams[offIdx], 'K', P);
         if (K) K.live.slot = 'kicker';
         var dist = (100 - game.ball) + 17;
+        var who = K ? P.sayPlayer(K, game.naming || 'both') + "'s " : '';
+
+        if (dcall === 'BLOCK') {
+            var rusher = bestRusher(game.teams[defIdx], P);
+            var pBlock = clamp(0.01 + ((rusher ? P.eff(rusher, 'blz') : 40) - 45) * 0.0004, 0.005, 0.03);
+            if (rng.chance(pBlock)) {
+                var rSay = rusher ? P.sayPlayer(rusher, game.naming || 'both') : 'the rush';
+                game.stats[offIdx].fga++;
+                game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg',
+                                text: who + dist + ' yard field goal is blocked by ' + rSay + '. ' +
+                                      game.teams[defIdx].name + ' take over.' });
+                game.clock = Math.max(0, game.clock - 4);
+                setPossession(game, defIdx, Math.max(20, 100 - (game.ball - 7)));
+                return;
+            }
+        }
+
         var kacc = K ? P.eff(K, 'kacc') : 40, leg = K ? P.eff(K, 'leg') : 40, nrv = K ? P.eff(K, 'nrv') : 40;
         var base = dist <= 25 ? 0.86 : dist <= 30 ? 0.76 : dist <= 35 ? 0.64 : dist <= 40 ? 0.50 : dist <= 45 ? 0.34 : dist <= 50 ? 0.20 : 0.08;
         var p = base + (kacc - 45) * 0.006 + (dist > 38 ? (leg - 45) * 0.004 : 0);
@@ -517,8 +621,6 @@
         p = clamp(p, 0.02, 0.97);
         game.stats[offIdx].fga++;
         var good = rng.chance(p);
-        // The kicker has a name (ISSUES.md, special teams name nobody).
-        var who = K ? P.sayPlayer(K, game.naming || 'both') + "'s " : '';
         game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg', text: who + dist + ' yard field goal ' + (good ? 'is good.' : 'is no good.') });
         game.clock = Math.max(0, game.clock - 5);
         if (good) { game.stats[offIdx].fgm++; score(game, offIdx, 3, deps); if (!game.ot) kickoff(game, offIdx, deps); }
@@ -819,6 +921,11 @@
         if (tempo === 'nohuddle' && !offSubbed && def.live.lastDefPersonnel && def.live.lastDefPersonnel !== defPersonnel) {
             if (rng.chance(0.22)) twelveMen = true; else misaligned = true;
         }
+        // A fake kick against a defense that committed to the block: the
+        // rush is real and the ball is not kicked, which is a misalignment
+        // in the exact sense the flag already models. Set by step() for this
+        // one snap and consumed here.
+        if (game.fakeVsBlock) { misaligned = true; game.fakeVsBlock = false; }
         off.live.lastPersonnel = personnel;
         def.live.lastDefPersonnel = defPersonnel;
 
@@ -1293,8 +1400,21 @@
             // (see DESIGN_PROPOSALS.md proposal 3).
             var d = game.hooks && game.hooks.special ? game.hooks.special(game, offIdx)
                     : (ot ? otFourthDownDecision(game, offIdx) : fourthDownDecision(game, offIdx));
-            if (d === 'punt') { punt(game, offIdx, deps); return null; }
-            if (d === 'fg') { fieldGoal(game, offIdx, deps); return null; }
+            // The defense answers the unit it is shown (DESIGN.md 8.4;
+            // ISSUES.md 2026-08-29). The coach's call comes through
+            // hooks.defSpecial; the computer picks from the same public
+            // arithmetic. A fake against a committed block rush plays like
+            // a snap against a misaligned defense, because that is what an
+            // all-out rush is once the ball is not kicked.
+            var shownUnit = d === 'punt' || d === 'fakepunt' ? 'punt'
+                          : d === 'fg' || d === 'fakefg' ? 'fg' : null;
+            var dsc = shownUnit
+                ? (game.hooks && game.hooks.defSpecial ? game.hooks.defSpecial(game, 1 - offIdx, shownUnit)
+                                                       : defSpecialCall(game, 1 - offIdx, shownUnit))
+                : null;
+            if (d === 'punt') { punt(game, offIdx, deps, dsc); return null; }
+            if (d === 'fg') { fieldGoal(game, offIdx, deps, dsc); return null; }
+            if ((d === 'fakepunt' || d === 'fakefg') && dsc === 'BLOCK') game.fakeVsBlock = true;
         }
         return runPlay(game, offIdx, deps, false);
     }
@@ -1317,6 +1437,7 @@
                 startGame: startGame, stepGame: stepGame, covBucket: covBucket,
                 kickoff: kickoff, kickoffPlay: kickoffPlay, onsideSituation: onsideSituation,
                 twoPointSituation: twoPointSituation, describeTry: describeTry,
+                defSpecialCall: defSpecialCall,
                 punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

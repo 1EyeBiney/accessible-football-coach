@@ -51,6 +51,7 @@ function answer(c) {
     else if (p.kind === 'tosschoice') { C.callTossChoice(c, 'RECEIVE'); }
     else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
     else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
+    else if (p.kind === 'defspecial') { C.callDefSpecial(c, C.defSpecialChoices(c).recommendation); }
     else { C.advance(c); }
     C.drain(c);
     return p.kind;

@@ -55,6 +55,7 @@ function playTo(c, guard, patAnswer) {
         else if (p.kind === 'tosschoice') { C.callTossChoice(c, 'RECEIVE'); }
         else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
         else if (p.kind === 'pat') { C.callPat(c, patAnswer ? patAnswer(c) : C.patChoices(c).recommendation); }
+        else if (p.kind === 'defspecial') { C.callDefSpecial(c, C.defSpecialChoices(c).recommendation); }
         else { C.advance(c); }
         C.reports(c);
     }
@@ -87,7 +88,7 @@ module.exports = function (t) {
 
     // ---------- the choices and the calls ----------
 
-    var c2 = newController(5);
+    var c2 = newController(17);
     var kinds2 = [];
     var g2 = 0;
     while (g2++ < 900 && C.pending(c2) && C.pending(c2).kind !== 'over') {
@@ -192,6 +193,7 @@ module.exports = function (t) {
             else if (pp.kind === 'tosschoice') { out = C.callTossChoice(cc, 'RECEIVE'); }
             else if (pp.kind === 'kickoff') { out = C.callKickoff(cc, C.kickoffChoices(cc).recommendation); }
             else if (pp.kind === 'pat') { out = C.callPat(cc, patCall); }
+            else if (pp.kind === 'defspecial') { out = C.callDefSpecial(cc, C.defSpecialChoices(cc).recommendation); }
             else { out = C.advance(cc); }
             (out || []).forEach(function (x) { lines.push(x.text); });
         }

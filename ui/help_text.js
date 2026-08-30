@@ -48,6 +48,7 @@
         l('The game opens with the coin toss: call it in the air with H for heads or T for tails. If you win, Enter takes the ball, or F offers deferring to the second half or kicking off.'),
         l('Kickoffs are a call like any other. Kicking, Enter takes the deep kick and F offers a squib, a pooch, or an onside kick. Receiving, Enter takes the regular return and F offers the hands team. When your coordinator handles a side for you, he only stops you for a kickoff when an onside kick is genuinely in play.'),
         l('After your own touchdown, the try is your call: Enter kicks the extra point, F offers going for two, which is a real snap from the three. When your coordinator handles the offense on the stop-me setting, he only stops you when the score genuinely makes two worth a thought.'),
+        l('Their fourth down is your call too. When they show the punt unit, Enter sets up the return and F offers going for the block or punting safe; the block is a real chance at the kick, paid for in return yards, and a fake gains against a committed rush. When they show the field goal unit, Enter rushes the kick and F offers field goal safe. And when they keep the offense out there, you call a defense like any other snap. On the stop-me setting your coordinator only interrupts for a kick when the block is genuinely worth the gamble.'),
         l('Your coordinator suggests a formation and a play as soon as the last one is over. You do not have to ask.'),
         l('A referee whistle marks the ball ready for play. Everything before the whistle belongs to the last play; everything after it belongs to the next one.'),
         l('After the whistle you hear the down and distance, then a short tone, then the call. On defense the call starts with what personnel the offense is showing, which is the same look your coordinator builds his call from.'),
@@ -229,6 +230,9 @@
         },
         'pat-call': {
             f: 'Options. Kick the extra point, or go for two.'
+        },
+        'defspecial-call': {
+            f: 'Options. Against the punt unit: the return, the block, or punt safe. Against the field goal unit: rush the kick, or field goal safe.'
         }
     };
 

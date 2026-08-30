@@ -229,7 +229,7 @@
             decisions: cc.decisions || { coach: 0, staff: 0 },
             forcedOffense: null, forcedDefense: null, forcedSpecial: null,
             forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null,
-            forcedPat: null
+            forcedPat: null, forcedDefSpecial: null
         };
         g.controller = c;
         // The engine reads the naming setting off the game when it resolves
