@@ -191,3 +191,27 @@ Special teams name nobody. Kickoffs, punts, field goals and extra points speak n
 The offensive line slides a position when one man is rested, because the lineup builder fills five slots from whoever is available rather than substituting into a specific slot. The naming made this audible - it is why the offensive figure for men called more than one thing is eleven a game against the defense's 0.12 - but it is lineup construction rather than naming, and changing it changes which player blocks which defender and therefore the harness. Written into ISSUES.md under Tuning with the measurement.
 
 What the reviewer confirmed and does not need re-investigating: seed replay is untouched (nothing new draws from the rng; same seed with naming at both, position and name, and with the key cycled every seventeenth action mid-game, all produce identical scores, play counts, per-play yards and final rng state); the save round trip is correct, with refs tagged and untagged like every other player reference, zero rendering differences and zero null refs across a 127-play round trip, and legacy saves defaulting correctly; every player named in an event is stamped, emergency fill-ins included, and injuries rebuild the chart after the line is rendered rather than before; the substitution list's stamping side effect cannot produce a wrong label; the A key collides with nothing and is documented in all three places; the sanitiser leaves "X receiver" and "Z receiver" intact; and LAST_NAME does not shadow the surname list - an earlier version of it did, which silently broke name generation and was caught by the suite before the reviewer ever saw it.
+
+## Accessibility auditor, session 6, after the last-play pass and the try
+
+The auditor drove milestones 13 and 14 end to end through the real interface files, scripted the gating matrix through the controller's own pending, and forced overtime games. Nine findings; two real, both fixed the same session, two theoretical and pre-existing, logged below.
+
+### Fixed
+
+The one that mattered: a phantom call prompt after every overtime try, whose answer was then silently swallowed. The overtime rotation now waits for the try (which is right - whether overtime continues depends on the point the try produces), but nextPending did not know the waiting step existed, so it fell through to the ordinary branches on the dead possession's stale state - the ball past the goal line - and asked for a play. The coach heard his touchdown, answered his try, and was then handed "third and goal at their zero" with a full suggestion; his answer went into a bookkeeping step that never ran a snap, and the game moved on without a word. After a fourth-down overtime touchdown the phantom was a special-teams prompt that could recommend a seventeen-yard field goal moments after his own score. One guard in nextPending fixes it: the rotation is an auto step. A regression test forces overtime and asserts no call prompt ever surfaces while the rotation waits.
+
+S said "Nothing has happened yet" after the coin toss had been announced. The toss was not on the action list. It is now, so the one moment of the game before any snap still answers honestly.
+
+Also from the nits: deserialize now initialises forcedPat alongside the other forced fields.
+
+### Logged, pre-existing, for a future engine pass
+
+A pre-snap penalty on a two-point try ends the try instead of replaying it: runPlay's two-point path returns before any penalty handling, so a false start reads "Two point try: Penalty, false start, five yards. The try is no good." Coherent speech, wrong football. This predates the milestone - the old synchronous code ignored res.penalty on a try the same way - and fixing it adds draws to a rare path, so it belongs in a deliberate engine pass. In ISSUES.md under Tuning.
+
+Two-point snaps count in the regular stats: play calls, attempts, and the belief averages all treat the try as an ordinary snap. Also pre-existing, also logged.
+
+The auditor also asked whether the coach should call a defense against an opponent's two-point try. Today he is not asked in any mode. That belongs to the same conversation as milestone 15's defensive fourth down, and is noted there.
+
+### Verified fine, no need to re-check
+
+The full gating matrix (COORD never, KEY only in the window with the six-hundred-second edge exact, ME always including at zero on the clock, the opponent's try always auto and its resolution spoken); the regulation sequencing (touchdown spoken before the try question, the answer before the kickoff question, one drain per action, the snap lead and whistle boundary in the right places); no stale down-and-distance anywhere around a regulation try; the S key's joins across scores, kickoff returns and half markers; the play clock and auto-advance timers unable to fire into a try; the possessive and sanitiser behaviour of the kicker lines in all three naming modes; save and resume at the try question through the real file path; and the F options list end to end.

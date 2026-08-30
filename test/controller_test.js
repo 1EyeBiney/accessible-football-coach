@@ -67,6 +67,8 @@ function playThrough(seed, opts) {
             out = C.callTossChoice(c, C.tossChoices(c).recommendation);
         } else if (p.kind === 'kickoff') {
             out = C.callKickoff(c, C.kickoffChoices(c).recommendation);
+        } else if (p.kind === 'pat') {
+            out = C.callPat(c, C.patChoices(c).recommendation);
         } else if (p.kind === 'auto') {
             out = C.advance(c);
         } else if (p.kind === 'over') {

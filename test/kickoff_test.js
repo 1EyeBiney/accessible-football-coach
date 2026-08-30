@@ -45,6 +45,7 @@ function answer(c) {
     else if (p.kind === 'cointoss') { C.callToss(c, true); }
     else if (p.kind === 'tosschoice') { C.callTossChoice(c, 'RECEIVE'); }
     else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
+    else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
     else if (p.kind === 'auto') { C.advance(c); }
     C.reports(c);
     return p.kind;

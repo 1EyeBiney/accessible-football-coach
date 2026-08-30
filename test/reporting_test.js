@@ -50,6 +50,7 @@ function answer(c) {
     else if (p.kind === 'cointoss') { C.callToss(c, true); }
     else if (p.kind === 'tosschoice') { C.callTossChoice(c, 'RECEIVE'); }
     else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
+    else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
     else { C.advance(c); }
     C.drain(c);
     return p.kind;
@@ -153,7 +154,7 @@ module.exports = function (t) {
         step(cAct, 1);
         var lg = cAct.game.log;
         var tail = lg.slice(-3).map(function (e) { return e.kind; });
-        if (tail.indexOf('td') >= 0 && tail.indexOf('kickoff') < 0) {
+        if (tail.indexOf('td') >= 0 && tail.indexOf('pat') >= 0 && tail.indexOf('kickoff') < 0) {
             var line2 = C.lastAction(cAct);
             t.ok(/Touchdown/.test(line2), 'after a score, S includes the touchdown line');
             t.ok(/extra point|two point/.test(line2), 'and the try that followed it');

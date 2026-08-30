@@ -14,7 +14,7 @@
     'use strict';
 
     var RULES = {
-        HS: { quarterSecs: 720, kickoffFrom: 40, touchback: 20, otStart: 10, timeouts: 3, goForTwoLate: true }
+        HS: { quarterSecs: 720, kickoffFrom: 40, touchback: 20, otStart: 10, timeouts: 3 }
     };
 
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -507,6 +507,7 @@
     function fieldGoal(game, offIdx, deps) {
         var rng = game.rng, P = deps.players;
         var K = kicker(game.teams[offIdx], 'K', P);
+        if (K) K.live.slot = 'kicker';
         var dist = (100 - game.ball) + 17;
         var kacc = K ? P.eff(K, 'kacc') : 40, leg = K ? P.eff(K, 'leg') : 40, nrv = K ? P.eff(K, 'nrv') : 40;
         var base = dist <= 25 ? 0.86 : dist <= 30 ? 0.76 : dist <= 35 ? 0.64 : dist <= 40 ? 0.50 : dist <= 45 ? 0.34 : dist <= 50 ? 0.20 : 0.08;
@@ -516,31 +517,78 @@
         p = clamp(p, 0.02, 0.97);
         game.stats[offIdx].fga++;
         var good = rng.chance(p);
-        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg', text: dist + ' yard field goal ' + (good ? 'is good.' : 'is no good.') });
+        // The kicker has a name (ISSUES.md, special teams name nobody).
+        var who = K ? P.sayPlayer(K, game.naming || 'both') + "'s " : '';
+        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'fg', text: who + dist + ' yard field goal ' + (good ? 'is good.' : 'is no good.') });
         game.clock = Math.max(0, game.clock - 5);
         if (good) { game.stats[offIdx].fgm++; score(game, offIdx, 3, deps); if (!game.ot) kickoff(game, offIdx, deps); }
         else setPossession(game, 1 - offIdx, Math.max(20, 100 - (game.ball - 7)));
     }
 
+    // The try after a touchdown is deferred to its own step, the same
+    // pattern as the kickoff, so the scoring coach can be asked: kick the
+    // extra point, or go for two (ISSUES.md, from play - the computer was
+    // choosing for him). The call sites did not change at all.
     function tryPAT(game, offIdx, deps) {
-        var rng = game.rng, P = deps.players;
+        game.pendingTry = { offIdx: offIdx };
+    }
+
+    // When a two-point try is genuinely worth a thought: fourth quarter,
+    // inside ten minutes, at the post-touchdown margins where two changes
+    // the game (down two, down five, down eight, or up one). Deterministic
+    // and public - the KEY-mode gate, the recommendation, and the headless
+    // fallback all read the same arithmetic, so a game nobody coaches makes
+    // the choice the old synchronous code made at the same moment.
+    function twoPointSituation(game, offIdx) {
         var diff = game.score[offIdx] - game.score[1 - offIdx];
-        var goTwo = game.quarter >= 4 && (diff === -2 || diff === -5 || diff === 1 || diff === -8) && game.clock <= 600;
-        if (goTwo) {
+        return game.quarter >= 4 && (diff === -2 || diff === -5 || diff === 1 || diff === -8) && game.clock <= 600;
+    }
+
+    // One line for a two-point try. The snap is real and its description is
+    // the ordinary one, but the down-and-distance head would be a lie - a
+    // try is not a first down - so the head is replaced with the try's own.
+    // Shared with the controller's renderEntry so a line already in the log
+    // re-renders under the naming setting in force now.
+    function describeTry(res, made, PL, opts) {
+        var full = describe(res, PL, opts);
+        return 'Two point try: ' + full.slice(full.indexOf(': ') + 2) +
+               (made ? ' The try is good.' : ' The try is no good.');
+    }
+
+    function resolveTry(game, deps) {
+        var t = game.pendingTry;
+        game.pendingTry = null;
+        var offIdx = t.offIdx;
+        var rng = game.rng, P = deps.players, PL = deps.plays;
+        var call = game.hooks && game.hooks.patCall ? game.hooks.patCall(game, offIdx)
+                 : (twoPointSituation(game, offIdx) ? 'two' : 'kick');
+        if (call === 'two') {
             var saved = { ball: game.ball, down: game.down, dist: game.dist };
             game.ball = 97; game.down = 1; game.dist = 3;
             var r = runPlay(game, offIdx, deps, true);
             var made = r && r.td;
-            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'two point try ' + (made ? 'is good.' : 'fails.') });
+            // The try is a real snap and is finally described as one: the
+            // old line said "two point try fails" with no word of what was
+            // run (found by the session 5 milestone review). res rides on
+            // the entry so the line re-renders under the naming setting.
+            game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', made: made, res: r,
+                            text: describeTry(r, made, PL, { off: offIdx, coach: coachIdxOf(game),
+                                                            players: P, naming: game.naming || 'both' }) });
             if (made) game.score[offIdx] += 2;
             game.ball = saved.ball; game.down = saved.down; game.dist = saved.dist;
-            return;
+            return null;
         }
         var K = kicker(game.teams[offIdx], 'K', P);
+        if (K) K.live.slot = 'kicker';
         var p = clamp(0.84 + ((K ? P.eff(K, 'kacc') : 40) - 45) * 0.005, 0.5, 0.99);
         var good = rng.chance(p);
-        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat', text: 'extra point ' + (good ? 'is good.' : 'is no good.') });
+        // The kicker finally has a name (ISSUES.md, special teams name
+        // nobody): "kicker Foster's extra point is good."
+        var who = K ? P.sayPlayer(K, game.naming || 'both') + "'s " : '';
+        game.log.push({ q: game.quarter, clock: game.clock, team: offIdx, kind: 'pat',
+                        text: who + 'extra point ' + (good ? 'is good.' : 'is no good.') });
         if (good) game.score[offIdx] += 1;
+        return null;
     }
 
     // ---------- game state helpers ----------
@@ -1054,6 +1102,8 @@
         game.pendingToss = true;
         game.pendingTossChoice = null;
         game.pendingKickoff = null;
+        game.pendingTry = null;
+        game.otRotate = false;
         return game;
     }
 
@@ -1139,6 +1189,9 @@
         // can ask its question and speak the answer between them.
         if (game.pendingToss) return resolveToss(game, deps);
         if (game.pendingTossChoice) return resolveTossChoice(game, deps);
+        // The try resolves before the kickoff a touchdown also owes, which
+        // is the order the field runs in.
+        if (game.pendingTry) return resolveTry(game, deps);
         if (game.pendingKickoff) return resolveKickoff(game, deps);
         if (game.ot) return otStep(game, deps);
         if (game.clock <= 0) {
@@ -1178,11 +1231,23 @@
     }
 
     function otStep(game, deps) {
+        // Rotation waits for a deferred try, because whether overtime
+        // continues depends on the score the try produces: deciding the
+        // period off the bare six would end a game the kick was about to
+        // tie, or play on in one it had already won. The old synchronous
+        // order - snap, try, then the bookkeeping - is preserved exactly,
+        // just spread across steps.
+        if (game.otRotate) { game.otRotate = false; return otRotate(game, deps, null); }
         var t = game.off;
         var before = game.score.slice();
         var res = step(game, deps, true);
         var possessionOver = (game.off !== t) || (game.score[t] !== before[t]) || game.down > 4;
         if (!possessionOver) return res;
+        if (game.pendingTry) { game.otRotate = true; return res; }
+        return otRotate(game, deps, res);
+    }
+
+    function otRotate(game, deps, res) {
         game.otIndex++;
         if (game.otIndex < 2) {
             setPossession(game, 1 - game.otFirst, 90);
@@ -1251,6 +1316,7 @@
                 otFourthDownDecision: otFourthDownDecision, setPossession: setPossession, step: step,
                 startGame: startGame, stepGame: stepGame, covBucket: covBucket,
                 kickoff: kickoff, kickoffPlay: kickoffPlay, onsideSituation: onsideSituation,
+                twoPointSituation: twoPointSituation, describeTry: describeTry,
                 punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};

@@ -154,7 +154,8 @@
                     otRound: g.otRound, otIndex: g.otIndex, otFirst: g.otFirst,
                     guard: g.guard, receivedFirst: g.receivedFirst,
                     pendingToss: g.pendingToss, pendingTossChoice: g.pendingTossChoice,
-                    pendingKickoff: g.pendingKickoff
+                    pendingKickoff: g.pendingKickoff, pendingTry: g.pendingTry,
+                    otRotate: g.otRotate
                 }),
                 rng: { seed: g.rng.seed, state: g.rng.state }
             },
@@ -204,7 +205,9 @@
             guard: rest.guard, receivedFirst: rest.receivedFirst,
             pendingToss: rest.pendingToss || false,
             pendingTossChoice: rest.pendingTossChoice || null,
-            pendingKickoff: rest.pendingKickoff || null
+            pendingKickoff: rest.pendingKickoff || null,
+            pendingTry: rest.pendingTry || null,
+            otRotate: rest.otRotate || false
         };
 
         var cc = untagWalk(payload.controller, byId);
@@ -225,7 +228,8 @@
             seenOffFormation: cc.seenOffFormation || {}, seenFront: cc.seenFront || {},
             decisions: cc.decisions || { coach: 0, staff: 0 },
             forcedOffense: null, forcedDefense: null, forcedSpecial: null,
-            forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null
+            forcedToss: null, forcedTossChoice: null, forcedKick: null, forcedReceive: null,
+            forcedPat: null
         };
         g.controller = c;
         // The engine reads the naming setting off the game when it resolves

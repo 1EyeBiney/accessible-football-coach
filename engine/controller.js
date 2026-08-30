@@ -191,6 +191,22 @@
         // stops him for the big ones, never when everything is delegated.
         if (c.game.pendingToss) return { kind: 'cointoss' };
         if (c.game.pendingTossChoice) return { kind: 'tosschoice' };
+        // The try after a touchdown (ISSUES.md, from play: the computer was
+        // kicking the extra point for the coach). His own scores only, gated
+        // like the kickoff: always in full control, only when a two-point
+        // try is genuinely live when the coordinator stops him for the big
+        // ones, never when everything is delegated. Unlike the dead kickoff
+        // below, a try at zero on the clock still matters - the point can
+        // decide the game - so there is no clock escape.
+        if (c.game.pendingTry) {
+            var ti = c.game.pendingTry.offIdx;
+            if (ti !== c.coach) return { kind: 'auto', reason: 'try' };
+            if (c.offenseMode === 'COORD') return { kind: 'auto', reason: 'try' };
+            if (c.offenseMode === 'KEY' && !c.deps.game.twoPointSituation(c.game, ti)) {
+                return { kind: 'auto', reason: 'try' };
+            }
+            return { kind: 'pat' };
+        }
         // The halftime briefing comes before the second-half kickoff call.
         if (c.game.quarter === 3 && !c.halftimeDone) return { kind: 'halftime' };
         if (c.game.pendingKickoff) {
@@ -208,6 +224,12 @@
             }
             return { kind: 'kickoff', side: kside };
         }
+        // The overtime rotation is a bookkeeping step waiting behind the try
+        // (engine/game.js otStep). The dead possession's state is stale until
+        // it runs - the ball is past the goal line - and asking anything on
+        // it produced a phantom call prompt whose answer the rotation then
+        // silently swallowed (found by the session 6 audit).
+        if (c.game.ot && c.game.otRotate) return { kind: 'auto', reason: 'overtime' };
         if (victoryFormationComing(c)) return { kind: 'auto', reason: 'victory formation' };
         if (c.game.down === 4) {
             // Not the coach's ball: the automatic coach's fourth-down call is
@@ -257,6 +279,15 @@
     // - kickoffs, free kicks, turnovers on downs, and anything loaded from a
     // save old enough not to have kept one - fall back to what was stored.
     function renderEntry(c, entry) {
+        // A two-point try carries its snap's result but is not an ordinary
+        // play line: its down-and-distance head would be a lie, so it goes
+        // through the try's own renderer.
+        if (entry.kind === 'pat' && entry.res && c.deps.game.describeTry) {
+            return c.deps.game.describeTry(entry.res, entry.made, c.deps.plays, {
+                off: entry.team, coach: c.coach,
+                players: c.deps.players, naming: c.naming
+            });
+        }
         if (entry.res && entry.res.concept && c.deps.game.describeBoth) {
             var both = c.deps.game.describeBoth(entry.res, c.deps.plays, {
                 off: entry.team, coach: c.coach,
@@ -288,6 +319,9 @@
         // exist (found by the milestone review).
         if (g.pendingToss || g.pendingTossChoice) {
             return 'Before the kickoff. ' + scorePart;
+        }
+        if (g.pendingTry) {
+            return g.teams[g.pendingTry.offIdx].name + ' lining up for the try. ' + scorePart;
         }
         if (g.pendingKickoff) {
             return g.teams[g.pendingKickoff.kickIdx].name + ' kicking off. ' + scorePart;
@@ -621,6 +655,32 @@
         return advance(c);
     }
 
+    // The try (DESIGN.md 8.4, same grammar as everything else). Deterministic,
+    // like kickoffChoices: nothing here draws from the seed, so no cache.
+    var PAT_OPTIONS = [
+        { id: 'KICK', text: 'Kick the extra point.' },
+        { id: 'TWO', text: 'Go for two. A real snap from the three yard line.' }
+    ];
+
+    function patChoices(c) {
+        var g = c.game;
+        if (!g.pendingTry) return null;
+        var ti = g.pendingTry.offIdx;
+        var two = c.deps.game.twoPointSituation(g, ti);
+        return { recommendation: two ? 'TWO' : 'KICK',
+                 text: two ? 'The score says the kick is not enough. Go for two.'
+                           : 'Kick the extra point.',
+                 options: PAT_OPTIONS.slice() };
+    }
+
+    function callPat(c, id) {
+        var g = c.game;
+        if (!g.pendingTry) return fail(c, 'There is no try to call.');
+        if (!PAT_OPTIONS.some(function (o) { return o.id === id; })) return fail(c, 'That is not a try call.');
+        c.forcedPat = { call: id === 'TWO' ? 'two' : 'kick' };
+        return advance(c);
+    }
+
     var ST_CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'your call, coach' };
 
     // Punt, field goal, go for it, or a fake, with the same confidence
@@ -811,6 +871,10 @@
             var fr = c.forcedReceive;
             hooks.kickoffReceive = function () { return fr.call; };
         }
+        if (c.forcedPat) {
+            var fp = c.forcedPat;
+            hooks.patCall = function () { return fp.call; };
+        }
         g.hooks = hooks;
         c.lastOffFormation = null;
         // The decision count for the career (DESIGN_PROPOSALS.md proposal 4,
@@ -820,6 +884,7 @@
         // decisions belong to nobody here.
         var hadForcedOffense = !!c.forcedOffense, hadForcedDefense = !!c.forcedDefense;
         var hadForcedSpecial = !!(c.forcedSpecial || c.forcedKick || c.forcedReceive);
+        var hadForcedPat = !!c.forcedPat;
         // Whose offense is about to run this snap. Recorded before the step
         // because a turnover flips g.off inside it, and a look at one team's
         // personnel must never be reported as a look at the other's (found by
@@ -828,12 +893,18 @@
         var offBefore = g.off;
 
         var wasKickoffStep = !!g.pendingKickoff;
+        // The try resolves before the kickoff in stepGame's chain, so a step
+        // with both pending is a try step, not a kickoff step.
+        var wasTryStep = !!g.pendingTry;
+        var tryWasCoachs = wasTryStep && g.pendingTry.offIdx === c.coach;
+        if (wasTryStep) wasKickoffStep = false;
         var wasTossStep = !!(g.pendingToss || g.pendingTossChoice);
         var downBefore = g.down;
         var logBefore = g.log.length;
         var res = deps.game.stepGame(g, deps);
         c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null;
         c.forcedToss = null; c.forcedTossChoice = null; c.forcedKick = null; c.forcedReceive = null;
+        c.forcedPat = null;
         g.hooks = null;
         c.snapId++;
         c.suggestCache = {};
@@ -844,6 +915,14 @@
                 else c.decisions.staff++;
             } else {
                 if (hadForcedDefense) c.decisions.coach++;
+                else c.decisions.staff++;
+            }
+        } else if (wasTryStep) {
+            // The try is a decision only on the coach's own score; the
+            // opponent's belongs to nobody, like any snap the other
+            // sideline runs.
+            if (tryWasCoachs) {
+                if (hadForcedPat) c.decisions.coach++;
                 else c.decisions.staff++;
             }
         } else if (wasKickoffStep) {
@@ -1080,7 +1159,9 @@
     // actions: a coach asking for the last play after a touchdown wants the
     // touchdown, not the kick that trailed it, so S starts at the snap and
     // carries the whole scoring sequence with it.
-    var ACTION_KINDS = { play: true, kickoff: true, punt: true, fg: true };
+    // The toss counts as an action so S never claims nothing has happened
+    // moments after the coin was announced (found by the session 6 audit).
+    var ACTION_KINDS = { play: true, kickoff: true, punt: true, fg: true, toss: true };
 
     function lastAction(c) {
         var g = c.game, i, start = -1;
@@ -1126,6 +1207,7 @@
                 callSheet: callSheet, formations: formations, substitutionList: substitutionList,
                 callOffense: callOffense, callDefense: callDefense,
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
+                patChoices: patChoices, callPat: callPat,
                 callToss: callToss, tossChoices: tossChoices, callTossChoice: callTossChoice,
                 kickoffChoices: kickoffChoices, callKickoff: callKickoff,
                 answerSubstitution: answerSubstitution, advance: advance,

@@ -11,7 +11,6 @@ I was on defense with Riverton (shouldn't matter) and held the offense short of 
 
 likewise later, on a short 4th down, the computer decided to go for it rather than kick a fairly short field goal but I did not get to choose the defense, or FG block or FG safe or any choice, the computer once it decided to go for it, the play just ran.
 
-I was playing on OC only halts on decisions and after scoring a TD, the computer automatically chose to kick an extra point for me, as coach, I cshould be given the choice of PAT or 2-point conversion.
 
 all penalties should be coach choices as whether to accept or reject the penalty and we need to figure out how to do that like real coaches get with the information on what happens if the play stands and such.
 
@@ -35,6 +34,8 @@ The OC shell-read clause: at full verbosity on offense, when the offensive coord
 The defense seeing the offense's personnel and answering it with a substitution, which is the design question from Brian's own play note. Written up in full as DESIGN_PROPOSALS.md proposal 5: the football reasoning, the three things it costs, and why it belongs in the same pass as the stale-personnel item below rather than on its own.
 
 ## Tuning
+
+A pre-snap penalty on a two-point try ends the try instead of replaying it: runPlay's two-point path returns before any penalty handling, so a false start reads "Two point try: Penalty, false start, five yards. The try is no good." Coherent speech, wrong football. Pre-existing (the old synchronous try ignored penalties the same way); fixing it adds draws to a rare path, so it wants a deliberate engine pass with the harness run before and after. Two-point snaps also count in the regular stats (play calls, attempts, belief averages) as ordinary snaps. Both found by the session 6 audit.
 
 The offensive line slides a position when one man is rested. offenseLineup fills its five slots from whoever is available rather than substituting into a specific slot, so benching the left tackle makes the left guard the left tackle, the center the left guard, and so on down the line. Real teams put a backup tackle at tackle. The position labels made this audible rather than causing it - eleven offensive players a game are called more than one thing, against 0.12 on defense where labels follow the depth chart - but fixing it changes which lineman blocks which defender and therefore the harness, so it wants a deliberate engine pass with the numbers run before and after. Found by the session 5 milestone review.
 
@@ -60,6 +61,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+The try is your call (2026-08-29, from Brian's play notes: the computer was kicking the extra point for him). After your own touchdown, Enter kicks and F offers going for two - a real snap from the three, finally described in full ("Two point try: Mesh from Spread... The try is good.") where the old line said "two point try fails" with no word of what was run. Gated like the kickoff: always asked in full control, only when the score genuinely makes two worth a thought on the stop-me setting (fourth quarter, down two, down five, down eight, or up one), never when delegated; the opponent's tries are never your question. The kicker is named on extra points and field goals now. In overtime the rotation waits for the try, because whether overtime continues depends on the point it produces. Commit: "Milestone 14: the try".
 
 The last play key, and Tab naming the possession (2026-08-29, from Brian's play notes). S says the last play again, with everything that followed it - the touchdown and the extra point ride along, because a coach asking for the last play after a score wants the score. It exists because C repeats the last report, and Z, X and Tab all overwrite that; S is the key that always has the play. Tab now names the possession outright - "Fairview ball, own eighteen" - so the yard line never has to be resolved through a pronoun; own and opponent are relative to the team just named. And Z now remembers across drives: on the first snap of a new possession it says "The last time they had the ball, they showed twenty one personnel from the I Formation", wording that never claims to be last snap, with "no look yet" reserved for a unit never faced at all. Commit: "Milestone 13: the last play, and where the ball is".
 
