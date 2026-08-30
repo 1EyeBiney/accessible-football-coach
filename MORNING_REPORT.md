@@ -1,57 +1,41 @@
 # Morning report
 
-Written August 29, 2026, after the listening pass and the naming pass. Plain prose, as always. Two milestones went in, both from your play notes and our conversation about the "X beat Y" lines. Everything is committed and pushed.
+Written August 29, 2026, after session six. Your six play notes went in as four milestones; the sliders idea is written up for your ruling. Everything is committed and pushed, the test suite is at 724 checks, and the balance numbers held through all of it.
 
-## What to open, and the first thing you will notice
+## The whole game asks you now
 
-Open index.html the way you always do, Enter to begin, through the menu and the team choice to the pre-game screen, and Enter again for the coin toss.
+This session's theme, looking back at your notes, was one thing: every decision a real head coach makes is now yours, on both sides of the ball. Open index.html and play a drive of defense and you will hear most of it.
 
-The first thing that is different is on the very first play. You will hear a low short blip, then what happened, then the referee whistle, then the down and distance, then the set tone, then the next call. The blip is the snap: everything after it belongs to the play, everything before it was you deciding. That is the boundary you asked for between the suggestion and the description, and it is the one thing I would most like your ear on, because I could only check its timing in a browser without a screen reader running.
+Their fourth down is your call. When they show the punt unit: "They show the punt unit. Set up the return. Enter accepts, or F for your other calls" - the block and punt safe are behind F. The block is a real gamble: about one punt in twenty-five when you call it, paid for in return yards, and a fake gains against a committed rush. When they show the field goal unit, Enter rushes the kick and F offers field goal safe. And when they keep the offense out there, you call a defense like any other snap - that was your exact note, "the play just ran," and it cannot any more. The computer makes the same calls against you from the same public logic, so a block can happen to you too.
 
-The second thing is the names. Where the game used to say "Marcus Webb beat Terrell Jones" it now says "nose tackle Webb beat right guard Jones". Every player has a position now, on both sides of the ball.
+The try is your call. After your touchdown: Enter kicks, F goes for two. The two-point try is a real snap from the three and you finally hear what was run - the old line said "two point try fails" and nothing else. On the stop-me setting your coordinator only interrupts when the score genuinely makes two worth a thought.
 
-## The three new keys
+The flag is your ruling. A live-ball penalty in your favour waits for you, and you hear exactly what a real coach gets from the referee: the play, the flag, and both futures. "Accept: second and seventeen at their forty five, replay the down. Decline: the play stands, third and two at their fifty two. I would take the penalty." Enter takes your coordinator's call, F offers the other. Flags with one sensible answer - pass interference, anything before the snap - are ruled automatically as they always were. Worth knowing: the computer defense now declines bad penalties too, about one holding call in twelve, where it used to accept every one. Your opponent got smarter this session.
 
-Z is the mirror of X. X is your own setup; Z is what the other team had on the field on the last snap. On offense it names the front they ran and how many linemen, linebackers and defensive backs were in it. On defense it names the formation and the personnel they showed - which the pre-snap prompt deliberately will not tell you, because the formation is hidden until the line, but by the time you press Z the snap has happened and you have earned it. If you have not seen that unit yet this possession it says so rather than guessing.
+## The smaller keys, from your other notes
 
-I turns the play hints on and off. A hint is your coordinator's note about what a concept beats and loses to, on the suggestion and on the call sheet both. It used to be tied to V, which meant you could not have the full play by play without the tutoring; they are separate settings now.
+S says the last play again, always. You were right that C could not do this job - checking anything with Z, X or Tab overwrote it. S walks back to the last action and brings everything that followed: the touchdown and the try ride along with the play that scored. During a flag, S says the snap under the flag.
 
-A sets how players are announced, cycling position and name, position only, and name only. It also says the last play again in whatever setting you just landed on, so you can hear the three side by side and pick rather than guess. Name only gives the whole name, not the last name, because fifty surnames are spread across the eighty men who dress and you were getting "Fletcher beat Fletcher" about twice a game.
+Tab now leads with the possession, in your suggested wording: "third and four. Fairview ball, own eighteen." Own and opponent are relative to the team just named, so there is no pronoun to resolve.
 
-All three work everywhere, and I and A also work on the pre-game screen, where Tab now reads them back with everything else.
+Z remembers across drives now: on a new possession it says "The last time they had the ball, they showed twenty one personnel from the I Formation" - never claiming to be last snap - and only says there is no look yet before you have faced that unit at all.
 
-## What the positions actually mean, because it is not quite one rule
+## Your sliders idea, written up for your ruling
 
-On defense, a position stays with a man all game. It follows his place on your depth chart, so it survives you resting him, changing fronts around him, or anyone in front of him going down. That is what makes it something to learn him by. It is honestly a convention rather than a real alignment - the engine models position groups, not where a man lines up - and DESIGN.md 4.4 says so plainly.
+Proposal 6 in DESIGN_PROPOSALS.md. Your three questions are answered from the code, and one answer will interest you: your defensive coordinator's observe-and-adjust loop is real and closed, but the offensive side is open - "they are bracketing your X receiver" is collected, reported to you once at halftime, and then acted on by nobody, on either team. Your OC never calls away from a bracket he has seen, and neither does theirs. Also: two of the five halftime choices currently do nothing at all, which the proposal documents plainly.
 
-On offense it is the job on the field instead, because those slots are real positions. A back filling in while your starter gets his legs back really is called the running back while he is out there. So you will hear the same man called two things across a game on offense, and that is correct rather than a bug.
+The proposal's recommended order, when you rule: close that offensive loop first (it is arguably a bug, not a feature), then build directives - a short authored list of standing instructions per coordinator, "take away their back," "attack their corner," in words rather than sliders, filtered through the same staff attributes as everything else and available to the computer coach on equal terms - and then make the halftime menu honest. Say the word and any or all of it gets built.
 
-One thing that came out of this and is written down rather than fixed: your offensive line slides a position when you rest one man. Bench the left tackle and the left guard becomes the left tackle, the center becomes the left guard, and so on. Real teams put a backup tackle at tackle. The naming made that audible rather than causing it, and fixing it changes which lineman blocks which defender, so it wants its own pass with the harness run before and after.
+## Two things to listen for and tell me about
 
-## The ball position, which you were right about
+The flag prompt describes the play, and then the resolved line describes it again with the ruling attached. The reviewer flagged the repetition as a judgment call only you can make: does hearing the play twice reassure or wear? Related: the snap cue plays when you commit a ruling, a snap sound before something that is not a snap. Both are one-line changes if they grate.
 
-You heard "ball on our own 25" on defense when the ball was on their 25. Where the ball is was being worked out from the offense's point of view rather than yours, so on defense every spot in the game had the wrong possessive. It is now worked out from your side of the ball and is right on both sides.
+And the block call's price - the halved return - plus the one-in-twenty-five payoff: does the gamble feel worth it at your ear, or should it bite harder and cost more?
 
-Two things fell out of fixing it. You had been hearing the same spot named two different ways inside a single utterance - "at their twenty four" from the situation line and then "at opponent twenty four" from the play by play - because there were two formatters with two vocabularies; there is one now. And "kickoff returned to the our own thirty eight", which was the new wording meeting an old template.
+## Known and parked
 
-Several lines were also running straight into the next sentence for want of a full stop. The touchdown into the extra point was the frequent one: "Touchdown Riverton extra point is no good." Kickoffs, punts, field goals, safeties, the coin toss, halftime and overtime all had it.
-
-And one that predates everything and was audible in every game you have ever played: the situation line said "three quarter, twelve minutes" where it meant "third quarter".
-
-## What is parked, and why
-
-Special teams still name nobody, in any mode, so you never meet your kicker, your punter or your returner. That is a gap in the naming idea rather than a defect in it, and it is written into ISSUES.md rather than bolted onto the end of a milestone.
-
-Z says "no look at their offense yet" on the first snap of every new drive, even in the fourth quarter against a team you have watched all night. The guard behind that is deliberate - it is what stops Z ever reporting your own unit as theirs - but your memory is not per-possession and the wording should probably be "the last time they had the ball". It needs a small decision from you about how stale information should be presented, so it is logged rather than guessed at.
-
-The question your third note raised, whether the defense should see your personnel and get a chance to answer it with a substitution, is written up in full as DESIGN_PROPOSALS.md proposal 5 - the football reasoning, what it would cost, and why it belongs in the same pass as the stale-personnel bug already logged. You chose to have it written up rather than built, and I think that was right: it changes the snap order and therefore what a seed replays.
-
-## What I need from you
-
-Mostly just your ear on the snap cue's timing, the same way the whistle needed a second pass. It fires as soon as you commit and the result waits on the end of the tone, so it should feel tight, but you are the one who can tell.
-
-After that, whether position and name is the right default or whether you would rather start somewhere else, and whether the position labels themselves sound right to you - "left end", "nose tackle", "mike linebacker", "nickel back", "X receiver", "right guard". Those are authored and easy to change.
+The two-point try still ignores penalties entirely - a false start ends it instead of replaying it, and holding on a successful try reads contradictory - all one wart, logged for its own engine pass. The "later" answers to a substitution request (L and K) turn out to be promises nothing keeps: the player is never pulled. That predates everything this session and is logged for the next fix pass; until then Y and N do what they say. Overtime flags take the rule rather than asking you, a documented compromise. The offensive line still slides positions when you rest one man, from last session's list.
 
 ## Where everything is written down
 
-PROGRESS.md has both milestones in order. ISSUES.md moved your three play notes and the naming work to Done, and gained the two new items above. CHANGELOG.md is at 0.7.0. REVIEW_NOTES.md has both reviewer passes in full, including what they checked and found fine. DESIGN.md gained section 4.4 on the position labels. Test suite is at 582 checks across eight files, up from 413 when the session started; the harness and the matrix are byte for byte what they were, because none of this touches how a snap resolves.
+PROGRESS.md has all four milestones. ISSUES.md moved your five built notes to Done and holds the steering proposal under Needs a decision. CHANGELOG.md is at 0.9.0. BALANCE_NOTES.md has the before-and-after numbers for the two seed-breaking milestones - every band held. REVIEW_NOTES.md has both reviewer passes, including an eighty-game proof that the penalty machinery moved no randomness. All pushed to github.com/1EyeBiney/accessible-football-coach.

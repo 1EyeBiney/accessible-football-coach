@@ -72,6 +72,9 @@ function playThrough(seed, opts) {
         } else if (p.kind === 'defspecial') {
             out = C.callDefSpecial(c, C.defSpecialChoices(c).recommendation);
             forced++;
+        } else if (p.kind === 'penalty') {
+            out = C.callPenalty(c, C.penaltyChoices(c).recommendation);
+            forced++;
         } else if (p.kind === 'auto') {
             out = C.advance(c);
         } else if (p.kind === 'over') {

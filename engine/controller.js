@@ -189,6 +189,14 @@
         // like the fourth down: always in full control, only when the
         // decision genuinely matters (an onside window) when the coordinator
         // stops him for the big ones, never when everything is delegated.
+        // A flag on the last snap: the engine only defers when the human's
+        // defense owns the choice, so this is always his question - unless
+        // he has handed the defense over entirely, in which case the rule
+        // answers for his coordinator on the next advance.
+        if (c.game.pendingPenalty) {
+            if (c.defenseMode === 'COORD') return { kind: 'auto', reason: 'penalty' };
+            return { kind: 'penalty' };
+        }
         if (c.game.pendingToss) return { kind: 'cointoss' };
         if (c.game.pendingTossChoice) return { kind: 'tosschoice' };
         // The try after a touchdown (ISSUES.md, from play: the computer was
@@ -344,6 +352,9 @@
         // exist (found by the milestone review).
         if (g.pendingToss || g.pendingTossChoice) {
             return 'Before the kickoff. ' + scorePart;
+        }
+        if (g.pendingPenalty) {
+            return 'A flag is down on the play. ' + scorePart;
         }
         if (g.pendingTry) {
             return g.teams[g.pendingTry.offIdx].name + ' lining up for the try. ' + scorePart;
@@ -749,6 +760,48 @@
         return advance(c);
     }
 
+    // The flag decision, spoken as both futures - which is the information
+    // a real coach gets from the referee before choosing (ISSUES.md
+    // 2026-08-29, from Brian's play notes). Deterministic; no cache.
+    function penaltyFutureSay(c, fut) {
+        var g = c.game;
+        if (fut.turnover) return 'they turn it over';
+        if (fut.td) return 'the touchdown stands';
+        if (fut.safety) return 'a safety';
+        if (fut.downs) return 'turnover on downs, your ball';
+        return ORDINAL[Math.min(4, fut.down)] + ' and ' +
+               (fut.dist >= (100 - fut.ball) ? 'goal' : words(fut.dist)) +
+               ' at ' + spotWords(fut.ball, g.off, c.coach);
+    }
+
+    function penaltyChoices(c) {
+        var g = c.game;
+        if (!g.pendingPenalty) return null;
+        var pp = g.pendingPenalty, res = pp.res;
+        var f = c.deps.game.penaltyFutures(g, res);
+        var rec = c.deps.game.penaltyRule(g, res);
+        // The snap itself has not been spoken yet - its log line waits on
+        // this decision - so the prompt carries it.
+        var both = c.deps.game.describeBoth(res, c.deps.plays,
+            { off: pp.offIdx, coach: c.coach, players: c.deps.players, naming: c.naming });
+        var playLine = (c.verbosity === 'terse' && both.terse) ? both.terse : both.full;
+        var acceptSay = 'Accept: ' + penaltyFutureSay(c, f.accept) + ', replay the down.';
+        var declineSay = 'Decline: the play stands, ' + penaltyFutureSay(c, f.decline) + '.';
+        return { recommendation: rec === 'decline' ? 'DECLINE' : 'ACCEPT',
+                 text: playLine + ' Flag on the offense, ' + res.penalty.kind + '. ' +
+                       acceptSay + ' ' + declineSay + ' ' +
+                       (rec === 'decline' ? 'I would let it stand.' : 'I would take the penalty.'),
+                 options: [ { id: 'ACCEPT', text: acceptSay },
+                            { id: 'DECLINE', text: declineSay } ] };
+    }
+
+    function callPenalty(c, id) {
+        if (!c.game.pendingPenalty) return fail(c, 'There is no flag to rule on.');
+        if (id !== 'ACCEPT' && id !== 'DECLINE') return fail(c, 'That is not a call on a flag.');
+        c.forcedPenalty = { call: id === 'DECLINE' ? 'decline' : 'accept' };
+        return advance(c);
+    }
+
     var ST_CONF_SAY = { sure: 'I like it', likely: 'worth a shot', guess: 'your call, coach' };
 
     // Punt, field goal, go for it, or a fake, with the same confidence
@@ -947,6 +1000,10 @@
             var fds = c.forcedDefSpecial;
             hooks.defSpecial = function () { return fds.call; };
         }
+        if (c.forcedPenalty) {
+            var fpn = c.forcedPenalty;
+            hooks.penaltyCall = function () { return fpn.call; };
+        }
         g.hooks = hooks;
         c.lastOffFormation = null;
         // The decision count for the career (DESIGN_PROPOSALS.md proposal 4,
@@ -958,6 +1015,7 @@
         var hadForcedSpecial = !!(c.forcedSpecial || c.forcedKick || c.forcedReceive);
         var hadForcedPat = !!c.forcedPat;
         var hadForcedDefSpecial = !!c.forcedDefSpecial;
+        var hadForcedPenalty = !!c.forcedPenalty;
         // Whose offense is about to run this snap. Recorded before the step
         // because a turnover flips g.off inside it, and a look at one team's
         // personnel must never be reported as a look at the other's (found by
@@ -965,6 +1023,7 @@
         // coach's own formation as the opponent's).
         var offBefore = g.off;
 
+        var wasPenaltyStep = !!g.pendingPenalty;
         var wasKickoffStep = !!g.pendingKickoff;
         // The try resolves before the kickoff in stepGame's chain, so a step
         // with both pending is a try step, not a kickoff step.
@@ -977,11 +1036,19 @@
         var res = deps.game.stepGame(g, deps);
         c.forcedOffense = null; c.forcedDefense = null; c.forcedSpecial = null;
         c.forcedToss = null; c.forcedTossChoice = null; c.forcedKick = null; c.forcedReceive = null;
-        c.forcedPat = null; c.forcedDefSpecial = null;
+        c.forcedPat = null; c.forcedDefSpecial = null; c.forcedPenalty = null;
         g.hooks = null;
         c.snapId++;
         c.suggestCache = {};
-        if (res) {
+        // A snap that deferred behind a flag still ran, and the call that
+        // put it on the field still counts; the ruling itself is counted on
+        // the step that resolves it, below.
+        var deferredBehindFlag = !wasPenaltyStep && !!g.pendingPenalty;
+        if (wasPenaltyStep) {
+            // The flag ruling is the coach's defense's decision.
+            if (hadForcedPenalty) c.decisions.coach++;
+            else c.decisions.staff++;
+        } else if (res || deferredBehindFlag) {
             // A real snap: the coach's team was on one side of it.
             if (offBefore === c.coach) {
                 if (hadForcedOffense || (downBefore === 4 && hadForcedSpecial)) c.decisions.coach++;
@@ -1246,6 +1313,17 @@
     function lastAction(c) {
         var g = c.game, i, start = -1;
         if (!g || !g.log) return null;
+        // A flagged snap has no log entry yet - its line waits on the
+        // ruling - so S must speak the snap under the flag, not the play
+        // before it (found by the milestone review).
+        if (g.pendingPenalty) {
+            var pres = g.pendingPenalty.res;
+            var pboth = c.deps.game.describeBoth(pres, c.deps.plays,
+                { off: g.pendingPenalty.offIdx, coach: c.coach,
+                  players: c.deps.players, naming: c.naming });
+            return ((c.verbosity === 'terse' && pboth.terse) ? pboth.terse : pboth.full) +
+                   ' A flag is down on the play.';
+        }
         for (i = g.log.length - 1; i >= 0; i--) {
             if (ACTION_KINDS[g.log[i].kind]) { start = i; break; }
         }
@@ -1289,6 +1367,7 @@
                 specialTeamsChoices: specialTeamsChoices, callSpecial: callSpecial,
                 patChoices: patChoices, callPat: callPat,
                 defSpecialChoices: defSpecialChoices, callDefSpecial: callDefSpecial,
+                penaltyChoices: penaltyChoices, callPenalty: callPenalty,
                 callToss: callToss, tossChoices: tossChoices, callTossChoice: callTossChoice,
                 kickoffChoices: kickoffChoices, callKickoff: callKickoff,
                 answerSubstitution: answerSubstitution, advance: advance,

@@ -54,6 +54,7 @@ function driveOne(c) {
     else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
     else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
     else if (p.kind === 'defspecial') { C.callDefSpecial(c, C.defSpecialChoices(c).recommendation); }
+    else if (p.kind === 'penalty') { C.callPenalty(c, C.penaltyChoices(c).recommendation); }
     else if (p.kind === 'auto') { C.advance(c); }
     C.reports(c); // drain like the interface would, so nothing piles up
     return p.kind;

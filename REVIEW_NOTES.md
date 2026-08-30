@@ -215,3 +215,33 @@ The auditor also asked whether the coach should call a defense against an oppone
 ### Verified fine, no need to re-check
 
 The full gating matrix (COORD never, KEY only in the window with the six-hundred-second edge exact, ME always including at zero on the clock, the opponent's try always auto and its resolution spoken); the regulation sequencing (touchdown spoken before the try question, the answer before the kickoff question, one drain per action, the snap lead and whistle boundary in the right places); no stale down-and-distance anywhere around a regulation try; the S key's joins across scores, kickoff returns and half markers; the play clock and auto-advance timers unable to fire into a try; the possessive and sanitiser behaviour of the kicker lines in all three naming modes; save and resume at the try question through the real file path; and the F options list end to end.
+
+## Simulation and accessibility reviewer, session 6, after the defensive fourth down and the penalties
+
+One combined pass over milestones 15 and 16, since they share the seed break. The reviewer's verification was unusually deep and is worth recording as method: an eighty-game A/B where the only variable was whether the penalty decision deferred or resolved inline, byte-identical in logs, scores and final rng state across all eighty, proving the runPlay split moved no draws; and nine hundred and sixteen forced rulings across two hundred and forty games with zero divergence between what penaltyFutures promises out loud and what finishPlay then applies - which was the class of bug that mattered most here, since a spoken future that differs from what happens is a lie. The missing goal-to-go fix-up in the accept future was proven a no-op for holding rather than assumed. Twenty-six games saved at a pending flag and played out both ways came back byte-identical.
+
+Seven findings: two real and fixed, one acknowledged wart now documented properly, one pre-existing broken promise logged, one cosmetic fixed, one theoretical logged, one left for Brian's ear.
+
+### Fixed
+
+Pressing E during a pending flag delegated the defense away but left the interface on the penalty step, so the auto-advance timer answered through the coach's own key path and credited him with a ruling he had just handed over. The delegation keys now re-sync the prompt when the pending question changes - guarded so cycling a mode is not a full repeat of a prompt already heard.
+
+S during a pending flag spoke the previous play, because the flagged snap has no log entry until the ruling. S now speaks the snap under the flag, with "A flag is down on the play" appended.
+
+deserialize now initialises forcedPenalty with the other forced fields.
+
+### Documented rather than fixed
+
+Live-ball holding on a successful two-point try is ignored and the try counts, while the line contradicts itself: "Penalty, holding, ten yards... The try is good." Added to the existing two-point-try wart in ISSUES.md Tuning, which had only covered the pre-snap case.
+
+Pre-existing, found in passing and the sharpest of the lot: the L and K answers to a substitution question - "at the next personnel change", "at the next dead ball" - are written to a field nothing reads. The coach is told "we will get him then" and the player is never pulled. A promise spoken and silently broken, which is the exact class CLAUDE.md forbids. Logged in ISSUES.md under Tuning for the next fix pass; it predates every milestone this session.
+
+Theoretical: defSpecialCall lacks the overtime guard onsideSituation has, unreachable through the UI, harmless even for a raw API caller.
+
+### For Brian's ear
+
+The flagged play is described twice - once in the prompt, once when its log line lands with the ruling clause - and the snap cue plays when he commits the ruling, a snap sound before something that is not a snap. Both are coherent; whether the repetition reassures or wears is a listening question, flagged in the morning report.
+
+### Verified clean, do not re-investigate
+
+Draw order through the split (the 80-game A/B above); the futures' truth (916 rulings, boundary arithmetic at the 1, 3, 99, 100 and 0 lines checked pure); the lineup rebuild in finishPlay safe because no substitution can surface mid-flag (takeMust gates before every snap and new hunches only arise inside finishPlay); the shown fourth-down unit honest (style.aggression is a coaching-style scalar, not a player attribute, and only the unit is revealed); the overtime opponent fourth down using the matching decision function; kneel-outs pre-empting the question; the KEY gate never stopping for routine field goals; blocked-kick spot arithmetic at the goal line; fakeVsBlock unable to leak into a save; the decision counter across defer and resolve with no double count; the play clock and auto-advance unable to fire into any of the new steps; and the empty-segment guard keeping a stray whistle out of the silent deferring advance.

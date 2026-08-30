@@ -116,7 +116,7 @@
             var line = CTRL().situationLine(app.game);
             if (app.step === 'offense-suggest' || app.step === 'defense-suggest' || app.step === 'special-suggest' ||
                 app.step === 'toss-choice' || app.step === 'kickoff-call' || app.step === 'pat-call' ||
-                app.step === 'defspecial-call') {
+                app.step === 'defspecial-call' || app.step === 'penalty-call') {
                 return line + ' ' + (app.suggested ? app.suggested.text : '') + ' Enter accepts.';
             }
             if (app.step === 'toss-call') return line + ' Call the toss: H for heads, T for tails.';
@@ -415,6 +415,13 @@
             app.step = 'toss-choice';
             app.suggested = tc;
             say(app, tc.text + ' Enter accepts, or F for your options.', 'result', 'ST');
+            return;
+        }
+        if (p.kind === 'penalty') {
+            var pnc = C.penaltyChoices(app.game);
+            app.step = 'penalty-call';
+            app.suggested = pnc;
+            say(app, pnc.text + ' Enter accepts my call, or F for both options.', 'result', 'DC');
             return;
         }
         if (p.kind === 'pat') {
@@ -718,6 +725,12 @@
             afterSnap(app, CTRL().callDefSpecial(app.game, item.id));
             return { say: 'defspecialcall' };
         }
+        if (v.kind === 'penaltycall') {
+            app.state.viewer = null;
+            tone(app, 'close');
+            afterSnap(app, CTRL().callPenalty(app.game, item.id));
+            return { say: 'penaltycall' };
+        }
         if (v.kind === 'defpart') {
             app.state.viewer = null;
             nextDefensePart(app, item.id);
@@ -881,6 +894,19 @@
             var next = order[(order.indexOf(cur) + 1) % 3];
             if (side === 'offense') app.offenseMode = next; else app.defenseMode = next;
             emit(app, C.setMode(g, side, next));
+            // Changing delegation can change what the game is asking - a
+            // pending flag or call delegated away becomes an auto step - so
+            // the prompt state must follow, or the stale step swallows the
+            // next key and mis-credits a decision the coach just handed
+            // over (found by the milestone review). Only re-prompted when
+            // the question actually changed, so cycling the mode is not a
+            // full repeat of a prompt already heard.
+            var STEP_OF = { offense: 'offense-suggest', defense: 'defense-suggest', special: 'special-suggest',
+                            pat: 'pat-call', kickoff: 'kickoff-call', defspecial: 'defspecial-call',
+                            penalty: 'penalty-call', cointoss: 'toss-call', tosschoice: 'toss-choice',
+                            substitution: 'sub-answer', auto: 'advance' };
+            var pkNow = C.pending(app.game).kind;
+            if (STEP_OF[pkNow] !== app.step) promptNext(app);
             return { say: 'mode' };
         }
         if (key.name === 'g') {
@@ -903,6 +929,7 @@
         if (app.step === 'kickoff-call') return kickoffKey(app, key);
         if (app.step === 'pat-call') return patKey(app, key);
         if (app.step === 'defspecial-call') return defSpecialKey(app, key);
+        if (app.step === 'penalty-call') return penaltyKey(app, key);
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }
@@ -1020,6 +1047,16 @@
             return { say: 'called' };
         }
         if (key.name === 'f') { openChoiceList(app, 'defspecialcall', CTRL().defSpecialChoices(app.game)); return { say: 'defspecial-list' }; }
+        if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
+        return null;
+    }
+
+    function penaltyKey(app, key) {
+        if (key.name === 'Enter') {
+            afterSnap(app, CTRL().callPenalty(app.game, app.suggested.recommendation));
+            return { say: 'called' };
+        }
+        if (key.name === 'f') { openChoiceList(app, 'penaltycall', CTRL().penaltyChoices(app.game)); return { say: 'penalty-list' }; }
         if (key.name === 'Escape') { say(app, contextLine(app), 'result'); return { say: 'here' }; }
         return null;
     }

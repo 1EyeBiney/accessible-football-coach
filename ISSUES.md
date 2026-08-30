@@ -9,10 +9,8 @@ An item marked "before next build" is fixed before any new feature work starts. 
 (Add what you noticed while playing. Where it happened, what you heard, and what you expected instead. A seed number helps if you have one; Shift Tab reads the current seed on the game screen.)
 
 
-all penalties should be coach choices as whether to accept or reject the penalty and we need to figure out how to do that like real coaches get with the information on what happens if the play stands and such.
 
 
-Thinking more abou the head coaching experience and what some users might want which would be to only have to make decisions at critical moments (like we have that option with O and E to cycle through coordinator involvemnt) but while the coordinators are doing that to be able to shift their priorities or tendencies if the human notices patterns. for example, during thehalftime report, I got info that the other team is concentrating on their X reciever and that they are focusing on our QB, which I"m guessig are tendencies noticed during the first half and report to em, but are they being taken avantage of? does the computer do the same and adjust? could the human have "sliders" or ways to encourage the coordinator to focus on the other team's RB in the 2nd half or during a key stretch or drive or just currently. This adds more head coaching strategy rather than play calling and is an optino some might want.
 
 
 
@@ -30,13 +28,17 @@ The defense seeing the offense's personnel and answering it with a substitution,
 
 ## Tuning
 
-A pre-snap penalty on a two-point try ends the try instead of replaying it: runPlay's two-point path returns before any penalty handling, so a false start reads "Two point try: Penalty, false start, five yards. The try is no good." Coherent speech, wrong football. Pre-existing (the old synchronous try ignored penalties the same way); fixing it adds draws to a rare path, so it wants a deliberate engine pass with the harness run before and after. Two-point snaps also count in the regular stats (play calls, attempts, belief averages) as ordinary snaps. Both found by the session 6 audit.
+A pre-snap penalty on a two-point try ends the try instead of replaying it: runPlay's two-point path returns before any penalty handling, so a false start reads "Two point try: Penalty, false start, five yards. The try is no good." Coherent speech, wrong football. Pre-existing (the old synchronous try ignored penalties the same way); fixing it adds draws to a rare path, so it wants a deliberate engine pass with the harness run before and after. Two-point snaps also count in the regular stats (play calls, attempts, belief averages) as ordinary snaps. Both found by the session 6 audit. The session 6 reviewer added the live-ball half of the same wart: holding on a successful two-point try is ignored and the try counts, while the line contradicts itself - "Penalty, holding, ten yards... The try is good." All three belong to the same future engine pass.
+
+The L and K answers to a substitution question - "at the next personnel change" and "at the next dead ball" - are written to a field nothing reads, so the coach is told "we will get him then" and the player is never pulled. A promise spoken and silently broken, which is the exact class CLAUDE.md forbids. Pre-existing, found by the session 6 reviewer in passing; belongs in the next fix pass, and until then Y and N are the answers that do what they say.
 
 The offensive line slides a position when one man is rested. offenseLineup fills its five slots from whoever is available rather than substituting into a specific slot, so benching the left tackle makes the left guard the left tackle, the center the left guard, and so on down the line. Real teams put a backup tackle at tackle. The position labels made this audible rather than causing it - eleven offensive players a game are called more than one thing, against 0.12 on defense where labels follow the depth chart - but fixing it changes which lineman blocks which defender and therefore the harness, so it wants a deliberate engine pass with the numbers run before and after. Found by the session 5 milestone review.
 
 (Fumbles lost were checked and deliberately left; see Done, below, and BALANCE_NOTES.md.)
 
 ## Needs a decision
+
+Steering the coordinators (2026-08-29, from Brian's play notes, ruled write-up-first). Written up in full as DESIGN_PROPOSALS.md proposal 6, which also answers the questions in the note from the code: the defensive coordinator's observe-and-adjust loop is closed and real, the offensive side's is open - "they are bracketing your X" is collected, reported once at halftime, and acted on by nobody, for either team - and two of the five halftime choices currently do nothing. The proposal's recommended order: close the OC loop first (arguably a simulation gap), then build directives - a small authored list of standing instructions per coordinator, not sliders - then make the halftime menu honest. Awaiting Brian's ruling.
 
 Original recorded audio (2026-08-28). Brian wants to eventually add real audio clips
 (crowd noise, play-by-play lines, etc.), not just the synthesized chimes. Section 21's
@@ -54,6 +56,8 @@ a specific desired effect genuinely can't be done that way.
 ## Done
 
 (Moved here by Claude Code with the commit that fixed it.)
+
+Penalties are your ruling (2026-08-29, from Brian's play notes: "all penalties should be coach choices... with the information on what happens if the play stands"). A live-ball flag in your favour now waits for you: you hear the play, the flag, and both futures - "Accept: second and seventeen at their forty five, replay the down. Decline: the play stands, third and two at their fifty two." - then Enter takes your coordinator's call and F offers the other. The recommendation follows the rule a real coach uses: never wave off a turnover, never let a score or a conversion stand, let a play that lost more than the flag stand, decline to force a punt. The computer defense uses the same rule, so it stops accepting bad penalties too - about one holding call in twelve is declined in computer play now, where before it accepted every one that did not erase a turnover. Flags with only one sensible answer, pass interference and everything pre-snap, stay automatic. Overtime flags take the rule rather than the question, a documented compromise. Commit: "Milestone 16: penalties, accept or decline".
 
 Their fourth down is your call (2026-08-29, from Brian's play notes: "the computer once it decided to punt, just punted the ball", and the go-for-it snap that ran without a defensive call). When the opponent shows the punt unit you set up the return, go for the block, or punt safe; when they show the field goal unit you rush the kick or play it safe; and when they keep the offense on the field you call a defense like any other snap, in every delegation mode that asks. The block is a real gamble - about one punt in twenty-five and one field goal in eighty when called, paid for in return yards, with a fake gaining against a committed rush - and the computer defense uses the same calls from the same public window, so blocks happen to you too. Punts now name the punter and the returner. The stale-personnel bug from the session 3 audit rode along in the same seed-breaking pass: the engine's coordinator no longer reads the other team's formation for a snap after a turnover. Numbers before and after in BALANCE_NOTES.md. Commit: "Milestone 15: the defense's fourth down".
 

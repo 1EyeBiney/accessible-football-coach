@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0, August 29, 2026. The defense's fourth down, and the flag is your ruling.
+
+The opponent's fourth down was nobody's question: one branch returned auto before the side dispatch, so even a go-for-it snap ran without the coach's defensive call. Now the unit trotting out is read as the public information it is. A go falls through to the ordinary defensive flow; the punt unit offers the return, the block, or punt safe; the field goal unit offers the rush or safe. Blocks are real and rare - one punt in twenty-five and one field goal in eighty when called, paid for in return yards, with a fake gaining against a committed rush - and the computer defense uses the same calls from the same desperation window. Punts name the punter and the returner, closing the special-teams-naming item.
+
+A live-ball flag in the coach's favour now waits for his ruling, spoken as both futures: "Accept: second and seventeen at their forty five, replay the down. Decline: the play stands, third and two at their fifty two," with the play itself and a recommendation. The rule behind the recommendation is the one a real coach uses - never wave off a turnover, never let a score stand, let a play that lost more than the flag stand, decline to force a punt - and the computer defense now uses it too, declining about one holding call in twelve where it used to accept everything that did not erase a turnover. Flags with one sensible answer stay automatic. Under the hood runPlay was split at the decision point so the ruling can defer as a ceremony step; the reviewer proved the split moved no draws with an eighty-game A/B, and verified nine hundred and sixteen forced rulings against their spoken futures with zero divergence.
+
+The stale-personnel bug from the session 3 audit rode along in the seed break: the engine's defensive coordinator no longer reads the other team's formation for a snap after a turnover.
+
+Three hundred even games at each step: 17.7 points a team a game before the pair, 17.3 after, every header band held throughout; the full numbers are in BALANCE_NOTES.md. node test/run.js: 724 checks across eleven files.
+
+## 0.8.0, August 29, 2026. The last play, where the ball is, and the try.
+
+S says the last play again, with everything that followed it - C repeats the last report, and the info keys overwrite that, so S is the key that always has the play. Tab names the possession outright: "Fairview ball, own eighteen." Z remembers across drives: "The last time they had the ball, they showed twenty one personnel from the I Formation."
+
+The extra point is the coach's call: Enter kicks, F offers going for two - a real snap from the three, finally described in full where the old line said "two point try fails" with no word of what was run. Gated like the kickoff: always in full control, only when the score makes two genuinely worth a thought on the stop-me setting, never when delegated. The kicker is named on extra points and field goals. In overtime the rotation waits for the try, because whether overtime continues depends on the point it produces - and the audit caught the controller asking a phantom question while it waited, fixed with a forced-overtime regression test.
+
+Harness and matrix byte for byte identical through both milestones, which was the acceptance test: the try deferral moved its draws without reordering them. 640 checks after the try; 597 after the listening keys.
+
 ## 0.7.0, August 29, 2026. How players are named.
 
 The play by play used to build its event sentences out of bare player names - "Marcus Webb beat Terrell Jones" - which is the one thing a coach who cannot see the field has nothing to anchor: no jersey number, no replay, no way to look a name up mid-drive. Every player now has a spoken position, and the default is the position and the last name: "nose tackle Webb beat right guard Jones".

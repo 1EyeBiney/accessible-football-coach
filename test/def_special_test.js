@@ -55,6 +55,7 @@ function playTo(c, guard, defAnswer) {
         else if (p.kind === 'kickoff') { C.callKickoff(c, C.kickoffChoices(c).recommendation); }
         else if (p.kind === 'pat') { C.callPat(c, C.patChoices(c).recommendation); }
         else if (p.kind === 'defspecial') { C.callDefSpecial(c, defAnswer ? defAnswer(c) : C.defSpecialChoices(c).recommendation); }
+        else if (p.kind === 'penalty') { C.callPenalty(c, C.penaltyChoices(c).recommendation); }
         else { C.advance(c); }
         C.reports(c);
     }
@@ -217,6 +218,7 @@ module.exports = function (t) {
                 var u = C.defSpecialChoices(cc).unit;
                 out = C.callDefSpecial(cc, dcall === 'BLOCK' ? 'BLOCK' : (u === 'fg' ? 'BLOCK' : dcall));
             }
+            else if (pp.kind === 'penalty') { out = C.callPenalty(cc, C.penaltyChoices(cc).recommendation); }
             else { out = C.advance(cc); }
             (out || []).forEach(function (x) { lines.push(x.text); });
         }

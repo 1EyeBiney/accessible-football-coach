@@ -887,6 +887,58 @@
         if (team.live.reports.length > 30) team.live.reports.splice(0, team.live.reports.length - 30);
     }
 
+    // ---------- penalties: accept or decline (DESIGN.md 8.4; ISSUES.md
+    // 2026-08-29, from Brian's play notes) ----------
+
+    // A penalty is decidable when both futures genuinely exist: a live-ball
+    // flag on the offense, where the play's own result was computed and can
+    // stand. Pass interference is only ever rolled on an incompletion, so
+    // declining it is never better and it stays automatic; a pre-snap flag
+    // has no play to decline to.
+    function penaltyDecidable(res) {
+        return !!(res && res.penalty && !res.penalty.preSnap &&
+                  res.penalty.on === 'O' && !res.penalty.autoFirst);
+    }
+
+    // Both futures as plain data, for the decision rule and for the spoken
+    // prompt: what accepting does (replay the down, the offense walked
+    // back) and what declining does (the play stands, downs advance).
+    function penaltyFutures(game, res) {
+        var pen = res.penalty;
+        // Accept: half-the-distance cap, the line to gain moves only as far
+        // as the ball does - the same arithmetic markOff applies.
+        var most = Math.floor(game.ball / 2);
+        var moved = Math.min(pen.yards, most);
+        var aBall = Math.max(1, game.ball - moved);
+        var accept = { down: game.down, dist: game.dist + (game.ball - aBall), ball: aBall };
+        // Decline: the play stands.
+        var decline;
+        if (res.outcome === 'interception' || res.fumbleLost) {
+            decline = { turnover: true };
+        } else {
+            var dBall = clamp(game.ball + res.yards, 0, 100);
+            if (dBall >= 100) decline = { td: true };
+            else if (dBall <= 0) decline = { safety: true };
+            else if (res.yards >= game.dist) decline = { down: 1, dist: Math.min(10, 100 - dBall), ball: dBall, first: true };
+            else if (game.down + 1 > 4) decline = { downs: true, ball: dBall };
+            else decline = { down: game.down + 1, dist: game.dist - res.yards, ball: dBall };
+        }
+        return { accept: accept, decline: decline };
+    }
+
+    // The rule a real coach uses, in order, and the recommendation the
+    // human hears. The defense is choosing, so "better" means worse for
+    // the offense.
+    function penaltyRule(game, res) {
+        var f = penaltyFutures(game, res);
+        var d = f.decline;
+        if (d.turnover || d.downs || d.safety) return 'decline';   // never wave off the ball
+        if (d.td || d.first) return 'accept';                      // never let the gain stand
+        if (res.yards <= -res.penalty.yards) return 'decline';     // the play cost them more than the flag would
+        if (d.down === 4 && d.dist > 3) return 'decline';          // force the punt
+        return 'accept';
+    }
+
     // ---------- one play from scrimmage ----------
 
     function runPlay(game, offIdx, deps, isTwoPoint) {
@@ -947,18 +999,71 @@
         res.tempo = tempo;
         res.sit = sit;
 
-        // Stats and memory
-        var st = game.stats[offIdx], dst = game.stats[defIdx];
-        var concept = PL.CONCEPTS[play.concept];
         // Tendency tracking: the offense sees what the defense lined up in.
         // This is an observation, not a peek at the call sheet.
         deps.staff.noteCoverage(off.live.beliefs.OC, covBucket(sit), dc.coverage, rng);
         deps.staff.noteAdjustment(off.live.beliefs.OC, dc.adjustment, rng);
 
-        // The defense declines an offensive penalty that would hand the ball
-        // back. A holding call must not erase an interception.
-        var turnedOver = res.outcome === 'interception' || res.fumbleLost;
-        if (turnedOver && res.penalty && res.penalty.on === 'O' && !res.penalty.preSnap) res.penalty = null;
+        // A decidable penalty is the benefiting coach's call (ISSUES.md
+        // 2026-08-29): the defense chooses on offensive holding. When that
+        // defense is the human's, everything from here on waits for his
+        // answer, deferred the way the try and the kickoff are; the
+        // computer decides by penaltyRule, which replaces the old hardcoded
+        // interception guard as its first clause. Not deferred on a
+        // two-point try (the penalty is ignored there, a logged wart) and
+        // not in overtime, where the rotation bookkeeping reads the score
+        // around the snap and cannot see a change of possession that lands
+        // in a ceremony step; overtime penalties take the rule.
+        if (penaltyDecidable(res) && !isTwoPoint) {
+            var humanDefense = game.teams[defIdx].autoCoach === false;
+            if (humanDefense && !game.ot && !(game.hooks && game.hooks.penaltyCall)) {
+                game.pendingPenalty = { res: res, offIdx: offIdx, playId: play.id,
+                                        hunchTest: hunchTest || null };
+                return null;
+            }
+            var pcall = game.hooks && game.hooks.penaltyCall
+                ? game.hooks.penaltyCall(game, res)
+                : penaltyRule(game, res);
+            if (pcall === 'decline') { res.penaltyDeclined = res.penalty; res.penalty = null; }
+        }
+
+        return finishPlay(game, offIdx, deps, res, play.id, hunchTest, isTwoPoint);
+    }
+
+    // Resolves the deferred penalty decision as a ceremony step, then
+    // finishes the snap it interrupted.
+    function resolvePenaltyStep(game, deps) {
+        var pp = game.pendingPenalty;
+        game.pendingPenalty = null;
+        var res = pp.res;
+        var pcall = game.hooks && game.hooks.penaltyCall
+            ? game.hooks.penaltyCall(game, res)
+            : penaltyRule(game, res);
+        if (pcall === 'decline') { res.penaltyDeclined = res.penalty; res.penalty = null; }
+        return finishPlay(game, pp.offIdx, deps, res, pp.playId, pp.hunchTest, false);
+    }
+
+    // Everything a snap does after the penalty question is settled: stats,
+    // beliefs, stamina, injuries, the application to the field, the clock,
+    // and the log. Split out of runPlay so a deferred decision can finish
+    // the same snap later; the lineups are rebuilt rather than carried,
+    // which is safe because building them draws nothing and nothing changes
+    // between the deferral and the answer.
+    function finishPlay(game, offIdx, deps, res, playId, hunchTest, isTwoPoint) {
+        var rng = game.rng, P = deps.players, PL = deps.plays;
+        var off = game.teams[offIdx], def = game.teams[1 - offIdx];
+        var defIdx = 1 - offIdx;
+        var sit = res.sit;
+        var tempo = res.tempo;
+        var dc = res.call;
+        var play = null, pi;
+        for (pi = 0; pi < off.playbook.length; pi++) if (off.playbook[pi].id === playId) { play = off.playbook[pi]; break; }
+        var lu = offenseLineup(off, res.formation, P, PL);
+        var dl = defenseLineup(def, dc.front, PL, P);
+
+        // Stats and memory
+        var st = game.stats[offIdx], dst = game.stats[defIdx];
+        var concept = PL.CONCEPTS[res.concept];
 
         // A play wiped out by a penalty did not happen, so it does not go in
         // the book. Pass interference is scored as no attempt, the way real
@@ -969,7 +1074,7 @@
         var needed = sit.down === 1 ? sit.dist * 0.4 : (sit.down === 2 ? sit.dist * 0.6 : sit.dist);
         var success = res.yards >= needed && res.outcome !== 'interception' && !res.fumbleLost;
         if (res.type !== 'penalty' && !nullified) {
-            play.calls++; play.yards += res.yards; if (success) play.success++;
+            if (play) { play.calls++; play.yards += res.yards; if (success) play.success++; }
             st.plays++;
             if (res.type === 'pass') {
                 if (res.outcome === 'sack') { st.sacks++; st.sackYds += res.yards; st.passYds += res.yards; }
@@ -991,7 +1096,8 @@
             if (res.fumble) { st.fumbles++; if (res.fumbleLost) st.fumblesLost++; }
             st.yardsHist.push(res.yards);
         }
-        if (res.penalty) { (res.penalty.on === 'O' ? st : dst).penalties++; }
+        var thrownFlag = res.penalty || res.penaltyDeclined;
+        if (thrownFlag) { (thrownFlag.on === 'O' ? st : dst).penalties++; }
 
         // Hunch accuracy. Only positive hunches are judged, because only they
         // are a recommendation; "look elsewhere" is not something a play can
@@ -1176,6 +1282,10 @@
             body += ' Penalty, ' + res.penalty.kind + ', ' + res.penalty.yards + ' yards' +
                     (res.penalty.autoFirst ? ' and an automatic first down' : '') + '.';
         }
+        // A declined flag is still part of the story of the snap.
+        if (res.penaltyDeclined) {
+            body += ' Penalty, ' + res.penaltyDeclined.kind + ', declined. The play stands.';
+        }
         return head + call + body + ev;
     }
 
@@ -1210,6 +1320,7 @@
         game.pendingTossChoice = null;
         game.pendingKickoff = null;
         game.pendingTry = null;
+        game.pendingPenalty = null;
         game.otRotate = false;
         return game;
     }
@@ -1294,6 +1405,9 @@
         if (game.guard++ > 1500) { finish(game); return null; }
         // The deferred ceremonies, each a step of its own so the interface
         // can ask its question and speak the answer between them.
+        // The flag on the last snap resolves before anything else: the
+        // snap it interrupted is not finished until it does.
+        if (game.pendingPenalty) return resolvePenaltyStep(game, deps);
         if (game.pendingToss) return resolveToss(game, deps);
         if (game.pendingTossChoice) return resolveTossChoice(game, deps);
         // The try resolves before the kickoff a touchdown also owes, which
@@ -1438,6 +1552,7 @@
                 kickoff: kickoff, kickoffPlay: kickoffPlay, onsideSituation: onsideSituation,
                 twoPointSituation: twoPointSituation, describeTry: describeTry,
                 defSpecialCall: defSpecialCall,
+                penaltyDecidable: penaltyDecidable, penaltyFutures: penaltyFutures, penaltyRule: penaltyRule,
                 punt: punt, fieldGoal: fieldGoal, tryPAT: tryPAT, expected: expected };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.AF = root.AF || {};
